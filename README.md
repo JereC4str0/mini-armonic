@@ -10,6 +10,10 @@ Basado en ideas de **Harmonic Information Theory** por Mariano Fernández Ménde
 
 Abrir en el navegador, conectar el controlador y tocar un pad:
 
+<video src="./mini-armonic-demo.mp4" controls width="100%" poster="./screenshot-v3.png"></video>
+
+También podés ver la captura estática:
+
 ![mini-armonic screenshot](./screenshot-v3.png)
 
 ---
