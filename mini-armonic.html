@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mini-armonic — laboratorio sonoro-visual</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #05040a;
+      --panel: rgba(255,255,255,0.025);
+      --panel-elev: rgba(255,255,255,0.045);
+      --border: rgba(255,255,255,0.08);
+      --border-sub: rgba(255,255,255,0.05);
+      --text: #f7f8f8;
+      --text-sec: #bfc7d2;
+      --text-muted: #8a8f98;
+      --accent: #7b61ff;
+      --accent-2: #00d4aa;
+      --accent-glow: rgba(123,97,255,0.35);
+      --danger: #ff5a5a;
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+      --mono: 'JetBrains Mono', ui-monospace, monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font); overflow: hidden; }
+
+    #app { position: relative; width: 100%; height: 100%; }
+
+    canvas#cv { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+
+    /* glass panels */
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 20px 50px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+
+    /* header */
+    #header {
+      position: absolute; top: 16px; left: 16px; right: 16px; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 18px; pointer-events: none;
+    }
+    #header .brand { display: flex; align-items: baseline; gap: 14px; }
+    #header h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; color: var(--text); }
+    #header .tag { font-family: var(--mono); font-size: 11px; color: var(--accent); border: 1px solid var(--accent); padding: 2px 7px; border-radius: 4px; }
+    #header .status { display: flex; gap: 10px; pointer-events: auto; }
+    .chip { font-family: var(--mono); font-size: 11px; padding: 5px 10px; border-radius: 6px; background: var(--panel-elev); border: 1px solid var(--border); color: var(--text-muted); }
+    .chip.on { color: var(--accent); border-color: var(--accent); background: rgba(123,97,255,0.10); }
+
+    /* layout */
+    #controls {
+      position: absolute; top: 84px; left: 16px; bottom: 16px; width: 300px; z-index: 10;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+    #info {
+      position: absolute; top: 84px; right: 16px; bottom: 16px; width: 280px; z-index: 10;
+      display: flex; flex-direction: column; gap: 12px;
+    }
+
+    .section { padding: 14px; }
+    .section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+
+    /* faders */
+    .fader { margin-bottom: 10px; }
+    .fader-head { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-sec); margin-bottom: 5px; }
+    .fader-head span:last-child { font-family: var(--mono); color: var(--accent); }
+    input[type=range] {
+      width: 100%; -webkit-appearance: none; height: 4px; background: rgba(255,255,255,0.08); border-radius: 2px; outline: none;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent-glow); cursor: pointer; border: 2px solid #fff;
+    }
+    input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); border: 2px solid #fff; cursor: pointer; }
+
+    /* pads */
+    .padgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .pad {
+      aspect-ratio: 1; border-radius: 8px; background: var(--panel-elev); border: 1px solid var(--border);
+      display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer;
+      transition: all 0.12s ease; user-select: none;
+    }
+    .pad:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); }
+    .pad.active { background: rgba(123,97,255,0.22); border-color: var(--accent); box-shadow: 0 0 18px var(--accent-glow); }
+    .pad .pnum { font-family: var(--mono); font-size: 9px; color: var(--text-muted); }
+    .pad .pname { font-size: 10px; font-weight: 600; color: var(--text-sec); margin-top: 2px; }
+    .pad .psec { font-size: 9px; color: var(--accent-2); margin-top: 1px; }
+
+    /* mode toggles */
+    .modebar { display: flex; gap: 6px; margin-bottom: 10px; }
+    .modebtn { flex: 1; font-size: 11px; padding: 7px 0; border-radius: 6px; background: var(--panel-elev); border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; transition: 0.15s; }
+    .modebtn:hover { color: var(--text); }
+    .modebtn.on { background: rgba(123,97,255,0.15); border-color: var(--accent); color: var(--text); }
+
+    /* sequencer */
+    .seqgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+    .step {
+      aspect-ratio: 1; border-radius: 5px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-sub);
+      display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 10px; color: var(--text-muted); cursor: pointer;
+    }
+    .step:hover { border-color: var(--border); }
+    .step.active { background: rgba(123,97,255,0.18); border-color: var(--accent); color: var(--text); box-shadow: 0 0 10px var(--accent-glow); }
+    .step.current { outline: 1px solid var(--accent-2); outline-offset: 1px; }
+
+    /* info */
+    .metric { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px solid var(--border-sub); font-size: 12px; }
+    .metric .m-label { color: var(--text-muted); }
+    .metric .m-val { font-family: var(--mono); color: var(--text); }
+
+    .kbd { font-family: var(--mono); font-size: 11px; color: var(--text-muted); line-height: 1.6; }
+    .kbd kbd { background: var(--panel-elev); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border); color: var(--text-sec); }
+
+    #midi-log { flex: 1; overflow-y: auto; font-family: var(--mono); font-size: 10px; color: var(--text-muted); line-height: 1.5; }
+    #midi-log .line { border-bottom: 1px solid var(--border-sub); padding: 2px 0; }
+
+    /* start modal */
+    #start-modal {
+      position: fixed; inset: 0; z-index: 100; background: rgba(5,4,10,0.92);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    #start-modal h2 { font-size: 36px; font-weight: 600; letter-spacing: -0.04em; margin-bottom: 8px; }
+    #start-modal p { color: var(--text-muted); font-size: 14px; margin-bottom: 28px; max-width: 420px; text-align: center; line-height: 1.5; }
+    #start-btn { padding: 14px 36px; border-radius: 8px; background: var(--accent); color: #fff; border: none; font-size: 14px; font-weight: 600; cursor: pointer; box-shadow: 0 0 30px var(--accent-glow); }
+    #start-btn:hover { background: #8f78ff; }
+    .hidden { display: none !important; }
+
+    /* responsive */
+    @media (max-width: 1100px) {
+      #controls, #info { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="start-modal">
+    <h2>mini-armonic</h2>
+    <p>Laboratorio sonoro-visual de proporciones armónicas. Conectá tu Minilab, tocá un pad y girá los knobs para explorar el campo.</p>
+    <button id="start-btn">INICIAR</button>
+  </div>
+
+  <div id="app">
+    <canvas id="cv"></canvas>
+
+    <div id="header" class="panel">
+      <div class="brand">
+        <h1>mini-armonic</h1>
+        <span class="tag">HIT LAB</span>
+      </div>
+      <div class="status">
+        <div class="chip" id="chip-audio">AUDIO OFF</div>
+        <div class="chip" id="chip-midi">MIDI —</div>
+        <div class="chip" id="chip-shift">SHIFT</div>
+        <div class="chip" id="chip-arp">ARP</div>
+      </div>
+    </div>
+
+    <div id="controls">
+      <div class="panel section">
+        <div class="section-title">Faders <span style="color:var(--text-muted);font-weight:400;">knobs CC 86-117</span></div>
+        <div id="faders"></div>
+      </div>
+
+      <div class="panel section">
+        <div class="section-title">Pads</div>
+        <div class="modebar">
+          <button class="modebtn" id="btn-shift">SHIFT</button>
+          <button class="modebtn" id="btn-arp">ARP</button>
+          <button class="modebtn" id="btn-seq">SEQ</button>
+        </div>
+        <div class="padgrid" id="padgrid"></div>
+      </div>
+
+      <div class="panel section">
+        <div class="section-title">Programador 16 pasos</div>
+        <div class="seqgrid" id="seqgrid"></div>
+      </div>
+    </div>
+
+    <div id="info">
+      <div class="panel section">
+        <div class="section-title">Campo activo</div>
+        <div class="metric"><span class="m-label">fundamental</span><span class="m-val" id="m-f0">110.0 Hz</span></div>
+        <div class="metric"><span class="m-label">armónicos</span><span class="m-val" id="m-harm">5</span></div>
+        <div class="metric"><span class="m-label">spread</span><span class="m-val" id="m-spread">0.85</span></div>
+        <div class="metric"><span class="m-label">ratio XY</span><span class="m-val" id="m-ratio">3 : 2</span></div>
+        <div class="metric"><span class="m-label">fase</span><span class="m-val" id="m-phase">0.00</span></div>
+        <div class="metric"><span class="m-label">volumen</span><span class="m-val" id="m-vol">0.50</span></div>
+        <div class="metric"><span class="m-label">perturbación</span><span class="m-val" id="m-pert">0.00</span></div>
+        <div class="metric"><span class="m-label">preset</span><span class="m-val" id="m-preset">—</span></div>
+      </div>
+
+      <div class="panel section">
+        <div class="section-title">Control</div>
+        <div class="kbd">
+          <p><kbd>Teclado Minilab</kbd> cambia f0 por nota.</p>
+          <p><kbd>Oct − / +</kbd> transpone una octava.</p>
+          <p><kbd>Shift + Pad</kbd> activa función secundaria.</p>
+          <p><kbd>Space</kbd> togglea SHIFT desde teclado.</p>
+          <p><kbd>A</kbd> togglea arpegiador.</p>
+        </div>
+      </div>
+
+      <div class="panel section" style="flex:1; display:flex; flex-direction:column; min-height:0;">
+        <div class="section-title">MIDI log</div>
+        <div id="midi-log"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+/* ============================================================
+   mini-armonic v2 — laboratorio sonoro-visual HIT
+   ============================================================ */
+
+const CONFIG = {
+  f0: 110.0,
+  harmonics: 5,
+  spread: 0.85,
+  ratioX: 3,
+  ratioY: 2,
+  phase: 0.0,
+  volume: 0.50,
+  perturb: 0.0,
+  waveform: 'sine',
+  activePreset: null,
+  shift: false,
+  arp: false,
+  seq: false,
+  seqStep: 0,
+  octave: 0
+};
+
+const FADERS = [
+  { cc: 86, label: 'f0', key: 'f0', min: 50, max: 400, fmt: v => v.toFixed(1)+' Hz' },
+  { cc: 87, label: 'armónicos', key: 'harmonics', min: 1, max: 16, int: true, fmt: v => v },
+  { cc: 89, label: 'spread', key: 'spread', min: 0.2, max: 2.0, fmt: v => v.toFixed(2) },
+  { cc: 90, label: 'ratio X', key: 'ratioX', min: 1, max: 8, int: true, fmt: v => v },
+  { cc: 110, label: 'ratio Y', key: 'ratioY', min: 1, max: 8, int: true, fmt: v => v },
+  { cc: 111, label: 'fase', key: 'phase', min: 0, max: Math.PI*2, fmt: v => v.toFixed(2) },
+  { cc: 116, label: 'volumen', key: 'volume', min: 0, max: 1, fmt: v => v.toFixed(2) },
+  { cc: 117, label: 'perturbación', key: 'perturb', min: 0, max: 1, fmt: v => v.toFixed(2) }
+];
+
+const PAD_PRESETS = {
+  36: { name: 'drone', ratioX: 1, ratioY: 1, harmonics: 5, spread: 0.9, sec: 'guardar' },
+  37: { name: '1:2', ratioX: 1, ratioY: 2, harmonics: 6, spread: 0.8, sec: 'recall' },
+  38: { name: '2:3', ratioX: 2, ratioY: 3, harmonics: 6, spread: 0.8, sec: 'arp on' },
+  39: { name: '3:4', ratioX: 3, ratioY: 4, harmonics: 6, spread: 0.8, sec: 'seq on' },
+  40: { name: '3:5', ratioX: 3, ratioY: 5, harmonics: 7, spread: 0.75, sec: 'rec' },
+  41: { name: '4:5', ratioX: 4, ratioY: 5, harmonics: 7, spread: 0.75, sec: 'play' },
+  42: { name: 'φ', ratioX: 1, ratioY: 1.618033988749895, harmonics: 8, spread: 0.7, sec: 'stop' },
+  43: { name: 'φ²', ratioX: 1, ratioY: 2.618033988749895, harmonics: 8, spread: 0.65, sec: 'clear' }
+};
+
+const SEQ_RATIOS = [
+  {x:1,y:1}, {x:2,y:1}, {x:2,y:3}, {x:3,y:2}, {x:3,y:4}, {x:4,y:3}, {x:3,y:5}, {x:5,y:3},
+  {x:4,y:5}, {x:5,y:4}, {x:5,y:6}, {x:6,y:5}, {x:1,y:1.618}, {x:1,y:2.618}, {x:1,y:1}, {x:2,y:1}
+];
+let seqSteps = SEQ_RATIOS.map(r => ({...r}));
+
+const KNOB_CCS = [86,87,89,90,110,111,116,117];
+const KNOB_CCS_ALT = [21,22,23,24,25,26,27,28];
+function knobIndex(cc) { let i=KNOB_CCS.indexOf(cc); return i>=0?i:KNOB_CCS_ALT.indexOf(cc); }
+
+// audio
+let audioCtx=null, masterGain=null, analyser=null;
+let oscillators=[], lissX=null, lissY=null;
+
+function midiToFreq(note){ return 440 * Math.pow(2, (note - 69)/12); }
+
+function initAudio(){
+  if(audioCtx) return;
+  audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = CONFIG.volume;
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  analyser.smoothingTimeConstant = 0.85;
+  masterGain.connect(analyser);
+  try { analyser.connect(audioCtx.destination); } catch(e){ console.warn('no audio output', e.message); }
+  rebuildField();
+  updateChip('audio', true);
+}
+
+function rebuildField(){
+  if(!audioCtx) return;
+  oscillators.forEach(o=>{ o.osc.stop(); o.osc.disconnect(); o.gain.disconnect(); });
+  oscillators=[];
+  if(lissX){ lissX.stop(); lissX.disconnect(); lissX=null; }
+  if(lissY){ lissY.stop(); lissY.disconnect(); lissY=null; }
+  const now=audioCtx.currentTime;
+  for(let n=1;n<=CONFIG.harmonics;n++){
+    const osc=audioCtx.createOscillator(), gain=audioCtx.createGain();
+    osc.type=CONFIG.waveform;
+    const freq=CONFIG.f0*n;
+    osc.frequency.setValueAtTime(freq,now);
+    const amp=Math.pow(n,-CONFIG.spread)*(1/Math.max(1,CONFIG.harmonics));
+    gain.gain.setValueAtTime(amp,now);
+    osc.connect(gain); gain.connect(masterGain); osc.start(now);
+    oscillators.push({osc,gain,n,freq});
+  }
+  lissX=audioCtx.createOscillator(); lissY=audioCtx.createOscillator();
+  const glx=audioCtx.createGain(), gly=audioCtx.createGain();
+  lissX.type=CONFIG.waveform; lissY.type=CONFIG.waveform;
+  lissX.frequency.setValueAtTime(CONFIG.f0*CONFIG.ratioX,now);
+  lissY.frequency.setValueAtTime(CONFIG.f0*CONFIG.ratioY,now);
+  glx.gain.setValueAtTime(0.08,now); gly.gain.setValueAtTime(0.08,now);
+  lissX.connect(glx); glx.connect(masterGain);
+  lissY.connect(gly); gly.connect(masterGain);
+  lissX.start(now); lissY.start(now);
+  applyVolume();
+}
+
+function updateFrequencies(){
+  if(!audioCtx) return;
+  const now=audioCtx.currentTime;
+  oscillators.forEach(o=>{ const f=CONFIG.f0*o.n; o.freq=f; o.osc.frequency.setTargetAtTime(f,now,0.02); });
+  if(lissX) lissX.frequency.setTargetAtTime(CONFIG.f0*CONFIG.ratioX,now,0.02);
+  if(lissY) lissY.frequency.setTargetAtTime(CONFIG.f0*CONFIG.ratioY,now,0.02);
+}
+
+function updateGains(){
+  if(!audioCtx) return;
+  const now=audioCtx.currentTime;
+  oscillators.forEach(o=>{ const amp=Math.pow(o.n,-CONFIG.spread)*(1/Math.max(1,CONFIG.harmonics)); o.gain.gain.setTargetAtTime(amp,now,0.05); });
+}
+
+function applyVolume(){
+  if(!masterGain) return;
+  masterGain.gain.setTargetAtTime(Math.max(0,Math.min(1,CONFIG.volume)), audioCtx.currentTime, 0.02);
+}
+
+// MIDI
+let midiAccess=null;
+function initMIDI(){
+  if(!navigator.requestMIDIAccess){ setMidiStatus('no soportado'); return; }
+  navigator.requestMIDIAccess({sysex:false}).then(acc=>{
+    midiAccess=acc;
+    const inputs=Array.from(midiAccess.inputs.values());
+    inputs.forEach(i=>i.onmidimessage=handleMIDI);
+    setMidiStatus(inputs.map(i=>i.name).join(', ')||'no inputs');
+  }).catch(e=>setMidiStatus('error: '+e.message));
+}
+function setMidiStatus(t){ document.getElementById('chip-midi').textContent=t? 'MIDI '+t : 'MIDI —'; }
+function logMidi(s){ const d=document.getElementById('midi-log'); const l=document.createElement('div'); l.className='line'; l.textContent=s; d.prepend(l); while(d.children.length>40) d.lastChild.remove(); }
+
+function handleMIDI(msg){
+  const d=msg.data, status=d[0]&0xF0, ch=(d[0]&0x0F)+1, note=d[1], vel=d[2];
+  logMidi(`${status.toString(16).toUpperCase().padStart(2,'0')} ch${ch} ${note}=${vel}`);
+
+  if(status===0xB0){
+    const idx=knobIndex(note);
+    if(idx>=0){
+      const f=FADERS[idx];
+      let v = f.min + (vel/127)*(f.max-f.min);
+      if(f.int) v=Math.round(v);
+      CONFIG[f.key]=v;
+      updateFader(idx);
+      if(['f0','ratioX','ratioY','phase','perturb'].includes(f.key)) updateFrequencies();
+      if(['harmonics','spread'].includes(f.key)){ if(f.key==='harmonics') rebuildField(); else updateGains(); }
+      if(f.key==='volume') applyVolume();
+      updateMetrics();
+    }
+    return;
+  }
+  if(status===0x90 && vel>0){
+    if(PAD_PRESETS[note]){
+      if(CONFIG.shift) doPadSecondary(note); else applyPreset(note);
+    } else if(note>=48 && note<=84){
+      CONFIG.f0 = midiToFreq(note + CONFIG.octave*12);
+      updateFader(0); updateFrequencies(); updateMetrics();
+    }
+    return;
+  }
+}
+
+function applyPreset(note){
+  const p=PAD_PRESETS[note]; if(!p) return;
+  CONFIG.ratioX=p.ratioX; CONFIG.ratioY=p.ratioY; CONFIG.harmonics=p.harmonics; CONFIG.spread=p.spread; CONFIG.activePreset=note;
+  rebuildField(); updateFaders(); updateMetrics(); updatePads();
+}
+
+function doPadSecondary(note){
+  const p=PAD_PRESETS[note]; if(!p) return;
+  switch(p.sec){
+    case 'arp on': toggleArp(); break;
+    case 'seq on': toggleSeq(); break;
+    case 'shift': toggleShift(); break;
+    case 'guardar': saveCurrentToStep(); break;
+    case 'recall': break;
+    case 'rec': break;
+    case 'play': break;
+    case 'stop': break;
+    case 'clear': clearSeq(); break;
+  }
+}
+
+function toggleShift(){ CONFIG.shift=!CONFIG.shift; updateChip('shift', CONFIG.shift); updatePads(); }
+function toggleArp(){ CONFIG.arp=!CONFIG.arp; updateChip('arp', CONFIG.arp); if(CONFIG.arp && !CONFIG.seq) toggleSeq(true); }
+function toggleSeq(force=false){ CONFIG.seq = force || !CONFIG.seq; document.getElementById('btn-seq').classList.toggle('on', CONFIG.seq); }
+
+function saveCurrentToStep(){
+  seqSteps[CONFIG.seqStep] = {x:CONFIG.ratioX, y:CONFIG.ratioY};
+  renderSeq();
+}
+function clearSeq(){ seqSteps = SEQ_RATIOS.map(r=>({...r})); renderSeq(); }
+
+// UI builders
+function buildFaders(){
+  const el=document.getElementById('faders');
+  FADERS.forEach((f,i)=>{
+    const d=document.createElement('div'); d.className='fader';
+    d.innerHTML = `<div class="fader-head"><span>${f.label}</span><span id="fv-${i}">${f.fmt(CONFIG[f.key])}</span></div>
+                   <input type="range" id="fi-${i}" min="0" max="127" value="${ccValue(f)}">`;
+    el.appendChild(d);
+    const inp=d.querySelector('input');
+    inp.addEventListener('input', e=>{
+      const v = f.min + (e.target.value/127)*(f.max-f.min);
+      CONFIG[f.key]=f.int?Math.round(v):v;
+      document.getElementById(`fv-${i}`).textContent=f.fmt(CONFIG[f.key]);
+      if(['f0','ratioX','ratioY','phase','perturb'].includes(f.key)) updateFrequencies();
+      if(['harmonics','spread'].includes(f.key)){ if(f.key==='harmonics') rebuildField(); else updateGains(); }
+      if(f.key==='volume') applyVolume();
+      updateMetrics();
+    });
+  });
+}
+function ccValue(f){ return Math.round(((CONFIG[f.key]-f.min)/(f.max-f.min))*127); }
+function updateFader(i){ const f=FADERS[i]; document.getElementById(`fi-${i}`).value=ccValue(f); document.getElementById(`fv-${i}`).textContent=f.fmt(CONFIG[f.key]); }
+function updateFaders(){ FADERS.forEach((_,i)=>updateFader(i)); }
+
+function buildPads(){
+  const g=document.getElementById('padgrid');
+  Object.keys(PAD_PRESETS).map(Number).sort((a,b)=>a-b).forEach(note=>{
+    const p=PAD_PRESETS[note];
+    const d=document.createElement('div'); d.className='pad'; d.id='pad-'+note;
+    d.innerHTML = `<span class="pnum">${note}</span><span class="pname">${p.name}</span><span class="psec" id="psec-${note}">${p.sec}</span>`;
+    d.addEventListener('click',()=>{ if(CONFIG.shift) doPadSecondary(note); else applyPreset(note); });
+    g.appendChild(d);
+  });
+}
+function updatePads(){
+  document.querySelectorAll('.pad').forEach(el=>{
+    const note=Number(el.id.split('-')[1]);
+    el.classList.toggle('active', note===CONFIG.activePreset);
+    const sec=document.getElementById('psec-'+note);
+    sec.textContent = CONFIG.shift ? PAD_PRESETS[note].sec : PAD_PRESETS[note].name;
+  });
+}
+
+function buildSeq(){
+  const g=document.getElementById('seqgrid');
+  for(let i=0;i<16;i++){
+    const d=document.createElement('div'); d.className='step'; d.id='step-'+i;
+    d.addEventListener('click',()=>{ seqSteps[i] = {x: CONFIG.ratioX, y: CONFIG.ratioY}; renderSeq(); });
+    g.appendChild(d);
+  }
+  renderSeq();
+}
+function renderSeq(){
+  for(let i=0;i<16;i++){
+    const d=document.getElementById('step-'+i);
+    const s=seqSteps[i];
+    d.textContent = `${s.x}:${s.y}`;
+    d.classList.toggle('active', i===CONFIG.seqStep);
+  }
+}
+
+function updateMetrics(){
+  document.getElementById('m-f0').textContent=CONFIG.f0.toFixed(1)+' Hz';
+  document.getElementById('m-harm').textContent=CONFIG.harmonics;
+  document.getElementById('m-spread').textContent=CONFIG.spread.toFixed(2);
+  document.getElementById('m-ratio').textContent=`${CONFIG.ratioX} : ${CONFIG.ratioY}`;
+  document.getElementById('m-phase').textContent=CONFIG.phase.toFixed(2);
+  document.getElementById('m-vol').textContent=CONFIG.volume.toFixed(2);
+  document.getElementById('m-pert').textContent=CONFIG.perturb.toFixed(2);
+  document.getElementById('m-preset').textContent = CONFIG.activePreset ? PAD_PRESETS[CONFIG.activePreset].name : '—';
+}
+function updateChip(id, on){ document.getElementById('chip-'+id).classList.toggle('on', on); }
+
+// arpeggiator / sequencer loop
+setInterval(()=>{
+  if(!CONFIG.seq || !CONFIG.arp) return;
+  CONFIG.seqStep = (CONFIG.seqStep + 1) % 16;
+  const s = seqSteps[CONFIG.seqStep];
+  CONFIG.ratioX = s.x; CONFIG.ratioY = s.y; CONFIG.activePreset = null;
+  updateFrequencies(); updateMetrics(); updateFaders(); renderSeq();
+}, 250);
+
+// canvas
+const canvas=document.getElementById('cv'), ctx=canvas.getContext('2d');
+let freqData=null, lissPoints=[];
+function resize(){ canvas.width=window.innerWidth; canvas.height=window.innerHeight; }
+window.addEventListener('resize', resize); resize();
+
+function drawSpectrum(w,h){
+  if(!analyser) return;
+  if(!freqData || freqData.length!==analyser.frequencyBinCount) freqData=new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(freqData);
+  const pad=18, count=64, bw=(w/3-pad*2)/count;
+  const baseX=pad, baseY=h-pad, maxH=h*0.30;
+
+  // panel
+  ctx.save();
+  ctx.fillStyle='rgba(10,8,18,0.55)';
+  ctx.strokeStyle='rgba(255,255,255,0.08)';
+  ctx.beginPath(); ctx.roundRect(baseX-pad, baseY-maxH-pad, w/3, maxH+pad*2, 10); ctx.fill(); ctx.stroke();
+  ctx.restore();
+
+  const binHz = (audioCtx?.sampleRate||44100)/analyser.fftSize;
+  for(let i=0;i<count;i++){
+    const bin=Math.floor(i*2.5);
+    let val=0; for(let k=0;k<2;k++) val+=freqData[bin+k]||0; val/=2;
+    const barH=(val/255)*maxH;
+    const x=baseX+i*(bw+1), y=baseY-barH;
+    const grad=ctx.createLinearGradient(x,baseY,x,y);
+    grad.addColorStop(0,'rgba(123,97,255,0.15)');
+    grad.addColorStop(1,`hsla(${260+val/255*80},90%,65%,${0.5+val/255*0.5})`);
+    ctx.fillStyle=grad;
+    ctx.beginPath(); ctx.roundRect(x,y,bw,barH, [3,3,0,0]); ctx.fill();
+    if(val>120){
+      const f=bin*binHz; const ratio=f/CONFIG.f0; const r=Math.round(ratio);
+      if(Math.abs(ratio-r)<0.08 && r>=1 && r<=CONFIG.harmonics){
+        ctx.fillStyle='#fff'; ctx.font='10px var(--mono)'; ctx.fillText('1:'+r, x, y-5);
+      }
+    }
+  }
+  ctx.fillStyle='var(--text-muted)'; ctx.font='11px var(--font)';
+  ctx.fillText('ESPECTRO ARMÓNICO', baseX, baseY-maxH-6);
+}
+
+function drawLissajous(w,h){
+  const cx=w*0.5, cy=h*0.5, r=Math.min(w,h)*0.26;
+  // panel ring
+  ctx.save();
+  ctx.strokeStyle='rgba(255,255,255,0.08)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,r+10,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle='rgba(10,8,18,0.35)'; ctx.beginPath(); ctx.arc(cx,cy,r+10,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+
+  const fx=CONFIG.ratioX, fy=CONFIG.ratioY, ph=CONFIG.phase+CONFIG.perturb*Math.PI*0.5;
+  const t=performance.now()/1000;
+  const x=Math.sin(t*fx*Math.PI*2+ph), y=Math.sin(t*fy*Math.PI*2);
+  lissPoints.push({x,y,age:0}); if(lissPoints.length>420) lissPoints.shift();
+  lissPoints.forEach(p=>p.age++);
+
+  ctx.save();
+  ctx.lineWidth=2; ctx.lineCap='round';
+  for(let i=0;i<lissPoints.length-1;i++){
+    const p=lissPoints[i], q=lissPoints[i+1];
+    const a=1-p.age/420;
+    ctx.strokeStyle=`hsla(${260+a*80},85%,70%,${a*0.9})`;
+    ctx.beginPath(); ctx.moveTo(cx+p.x*r, cy+p.y*r); ctx.lineTo(cx+q.x*r, cy+q.y*r); ctx.stroke();
+  }
+  ctx.restore();
+
+  ctx.fillStyle='var(--text)'; ctx.font='600 14px var(--font)'; ctx.textAlign='center';
+  ctx.fillText(`LISSAJOUS  ${fx} : ${fy.toFixed(3)}`, cx, cy-r-28);
+  ctx.textAlign='left';
+}
+
+function drawHarmonicCircle(w,h){
+  const panelW=w/3-36, cx=w-panelW/2-18, cy=h*0.5, r=Math.min(panelW,h*0.30)*0.55;
+  ctx.save();
+  ctx.fillStyle='rgba(10,8,18,0.55)'; ctx.strokeStyle='rgba(255,255,255,0.08)';
+  ctx.beginPath(); ctx.roundRect(w-panelW-24, cy-r-50, panelW, r*2+100, 10); ctx.fill(); ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle='var(--text-muted)'; ctx.font='11px var(--font)';
+  ctx.fillText('CÍRCULO ARMÓNICO', w-panelW-18, cy-r-32);
+
+  // base ring
+  ctx.strokeStyle='rgba(255,255,255,0.10)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,0.03)'; ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+
+  for(let n=1; n<=CONFIG.harmonics; n++){
+    const angle = Math.log2(n)*Math.PI*2;
+    const dist = r * (0.25 + 0.75 * Math.pow(n, -CONFIG.spread));
+    const px=cx+Math.cos(angle)*dist, py=cy+Math.sin(angle)*dist;
+
+    ctx.strokeStyle='rgba(123,97,255,0.25)'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(px,py); ctx.stroke();
+
+    ctx.fillStyle=`hsla(${260+n*22},80%,65%,0.95)`;
+    ctx.beginPath(); ctx.arc(px,py,3+Math.pow(n,-CONFIG.spread)*5,0,Math.PI*2); ctx.fill();
+
+    ctx.fillStyle='rgba(255,255,255,0.8)'; ctx.font='10px var(--mono)';
+    ctx.fillText('1:'+n, px+8, py+3);
+  }
+  // center
+  ctx.fillStyle='var(--text)'; ctx.beginPath(); ctx.arc(cx,cy,5,0,Math.PI*2); ctx.fill();
+  ctx.fillStyle='var(--accent)'; ctx.font='11px var(--mono)'; ctx.fillText('f0', cx+8, cy+4);
+}
+
+function drawHUD(w,h){
+  ctx.fillStyle='rgba(255,255,255,0.5)'; ctx.font='10px var(--mono)'; ctx.textAlign='right';
+  ctx.fillText('mini-armonic v2  —  HIT lab', w-18, h-18);
+  ctx.textAlign='left';
+}
+
+function loop(){
+  ctx.fillStyle='rgba(5,4,10,0.28)';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  drawLissajous(canvas.width,canvas.height);
+  drawSpectrum(canvas.width,canvas.height);
+  drawHarmonicCircle(canvas.width,canvas.height);
+  drawHUD(canvas.width,canvas.height);
+  requestAnimationFrame(loop);
+}
+
+// keyboard shortcuts
+window.addEventListener('keydown', e=>{
+  if(e.code==='Space'){ e.preventDefault(); toggleShift(); }
+  if(e.code==='KeyA'){ toggleArp(); }
+});
+
+document.getElementById('start-btn').addEventListener('click',()=>{
+  initAudio(); initMIDI(); document.getElementById('start-modal').classList.add('hidden');
+});
+document.getElementById('btn-shift').addEventListener('click',toggleShift);
+document.getElementById('btn-arp').addEventListener('click',toggleArp);
+document.getElementById('btn-seq').addEventListener('click',()=>toggleSeq());
+
+buildFaders(); buildPads(); buildSeq(); updateMetrics(); updatePads(); loop();
+</script>
+</body>
+</html>
