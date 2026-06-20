@@ -12,11 +12,7 @@ Abrir en el navegador, conectar el controlador y tocar un pad:
 
 ![mini-armonic demo](./mini-armonic-demo.gif)
 
-También podés ver la captura estática:
-
-![mini-armonic screenshot](./screenshot-v3.png)
-
-O descargar el video original: [mini-armonic-demo.mp4](./mini-armonic-demo.mp4)
+descargar el video original: [mini-armonic-demo.mp4](./mini-armonic-demo.mp4)
 
 ---
 
