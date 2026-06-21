@@ -110,18 +110,29 @@ Si movés un control no asignado, el **MIDI inspector** muestra el CC exacto.
 
 ### Pads del Minilab 3 (notas 36-43)
 
-| Pad | Nota | Preset      | Ratio    |
-|-----|------|-------------|----------|
-| 1   | 36   | drone       | 1:1      |
-| 2   | 37   | 1:2         | 1:2      |
-| 3   | 38   | 2:3         | 2:3      |
-| 4   | 39   | 3:4         | 3:4      |
-| 5   | 40   | 3:5         | 3:5      |
-| 6   | 41   | 4:5         | 4:5      |
-| 7   | 42   | φ           | 1:φ      |
-| 8   | 43   | φ²          | 1:φ²     |
+| Pad | Nota | Preset HIT      | Ratio    | Tipo     |
+|-----|------|-----------------|----------|----------|
+| 1   | 36   | unísono         | 1:1      | storage  |
+| 2   | 37   | octava          | 1:2      | storage  |
+| 3   | 38   | quinta          | 2:3      | storage  |
+| 4   | 39   | cuarta          | 3:4      | storage  |
+| 5   | 40   | tercera mayor   | 4:5      | storage  |
+| 6   | 41   | sexta menor     | 3:5      | storage  |
+| 7   | 42   | φ query         | 1:φ      | query    |
+| 8   | 43   | φ² query        | 1:φ²     | query    |
 
-### Shift + Pads
+Los primeros seis presets cubren la región densa **1:2:3:4:5** que Mariano Fernández Méndez identifica en el Harmonic Beacon como la que genera las figuras de Lissajous más estables. Los dos últimos son ratios de activación: no buscan estabilidad sino recorrer el campo sin hacer _lock_.
+
+### Funciones
+
+| Botón  | Acción                                        |
+|--------|-----------------------------------------------|
+| SHIFT  | Activa funciones secundarias de los pads.     |
+| ARP    | Arpegiador on/off.                            |
+| SEQ    | Secuenciador on/off.                          |
+| BEACON | Carga la secuencia inspirada en la portada del libro HIT (resonancia 1:2:3:4:5). |
+| SAVE   | Guarda el ratio actual en el paso actual.     |
+| CLEAR  | Restaura la secuencia por defecto.            |
 
 Con **SHIFT** activo (botón de la UI, tecla `Space`, o pad 37) los pads pasan a funciones secundarias:
 
@@ -144,6 +155,7 @@ Las notas del teclado (C3-C6 aprox.) cambian la frecuencia fundamental `f0` seg�
 
 - `Space` — toggle SHIFT.
 - `A` — toggle arpegiador.
+- `B` — cargar secuencia BEACON.
 
 ---
 

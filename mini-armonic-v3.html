@@ -284,6 +284,7 @@
       <div class="status">
         <div class="chip" id="chip-audio">AUDIO OFF</div>
         <div class="chip" id="chip-midi">MIDI —</div>
+        <div class="chip" id="chip-mode">STORAGE</div>
         <div class="chip" id="chip-shift">SHIFT</div>
         <div class="chip" id="chip-arp">ARP</div>
         <button id="focus-btn" title="Modo focus">□</button>
@@ -318,6 +319,7 @@
           <button class="funcbtn" id="btn-shift">SHIFT</button>
           <button class="funcbtn" id="btn-arp">ARP</button>
           <button class="funcbtn" id="btn-seq">SEQ</button>
+          <button class="funcbtn" id="btn-beacon" onclick="loadBeaconSequence()">BEACON</button>
           <button class="funcbtn" id="btn-save">SAVE</button>
           <button class="funcbtn" id="btn-clear">CLEAR</button>
         </div>
@@ -338,6 +340,7 @@
         <div class="metric"><span class="m-label">armónicos</span><span class="m-val" id="m-harm">5</span></div>
         <div class="metric"><span class="m-label">spread</span><span class="m-val" id="m-spread">0.85</span></div>
         <div class="metric"><span class="m-label">ratio XY</span><span class="m-val" id="m-ratio">3 : 2</span></div>
+        <div class="metric"><span class="m-label">modo</span><span class="m-val" id="m-mode">storage</span></div>
         <div class="metric"><span class="m-label">fase</span><span class="m-val" id="m-phase">0.00</span></div>
         <div class="metric"><span class="m-label">volumen</span><span class="m-val" id="m-vol">0.50</span></div>
         <div class="metric"><span class="m-label">perturbación</span><span class="m-val" id="m-pert">0.00</span></div>
@@ -397,14 +400,14 @@ const FADERS = [
 ];
 
 const PAD_PRESETS = {
-  36: { name: 'drone', ratioX: 1, ratioY: 1, harmonics: 5, spread: 0.9 },
-  37: { name: '1:2', ratioX: 1, ratioY: 2, harmonics: 6, spread: 0.8 },
-  38: { name: '2:3', ratioX: 2, ratioY: 3, harmonics: 6, spread: 0.8 },
-  39: { name: '3:4', ratioX: 3, ratioY: 4, harmonics: 6, spread: 0.8 },
-  40: { name: '3:5', ratioX: 3, ratioY: 5, harmonics: 7, spread: 0.75 },
-  41: { name: '4:5', ratioX: 4, ratioY: 5, harmonics: 7, spread: 0.75 },
-  42: { name: 'φ', ratioX: 1, ratioY: 1.618033988749895, harmonics: 8, spread: 0.7 },
-  43: { name: 'φ²', ratioX: 1, ratioY: 2.618033988749895, harmonics: 8, spread: 0.65 }
+  36: { name: 'unísono', ratioX: 1, ratioY: 1, harmonics: 5, spread: 0.9, type: 'storage', desc: '1:1 — punto de partida' },
+  37: { name: 'octava', ratioX: 1, ratioY: 2, harmonics: 6, spread: 0.8, type: 'storage', desc: '1:2 — primer armónico natural' },
+  38: { name: 'quinta', ratioX: 2, ratioY: 3, harmonics: 6, spread: 0.8, type: 'storage', desc: '2:3 — base de la música occidental' },
+  39: { name: 'cuarta', ratioX: 3, ratioY: 4, harmonics: 6, spread: 0.8, type: 'storage', desc: '3:4 — inversa de la quinta' },
+  40: { name: 'tercera mayor', ratioX: 4, ratioY: 5, harmonics: 7, spread: 0.75, type: 'storage', desc: '4:5 — región 1:2:3:4:5' },
+  41: { name: 'sexta menor', ratioX: 3, ratioY: 5, harmonics: 7, spread: 0.75, type: 'storage', desc: '3:5 — extensión de la región densa' },
+  42: { name: 'φ query', ratioX: 1, ratioY: 1.618033988749895, harmonics: 8, spread: 0.7, type: 'query', desc: 'φ — perturbación de activación' },
+  43: { name: 'φ² query', ratioX: 1, ratioY: 2.618033988749895, harmonics: 8, spread: 0.65, type: 'query', desc: 'φ² — límite de la familia φ' }
 };
 
 const RATIO_COLORS = {
@@ -455,6 +458,33 @@ function getRatioColor(){
   return RATIO_COLORS[36];
 }
 
+function getRatioMode(){
+  if(CONFIG.activePreset && PAD_PRESETS[CONFIG.activePreset].type){
+    return PAD_PRESETS[CONFIG.activePreset].type;
+  }
+  const r = CONFIG.ratioY / Math.max(0.001, CONFIG.ratioX);
+  // detectar queries conocidas
+  if(Math.abs(r-1.618033988749895)<0.015 || Math.abs(r-2.618033988749895)<0.025) return 'query';
+  // detectar ratios enteros simples: comprobar fracciones de enteros pequeños
+  const limit = 12;
+  for(let a=1;a<=limit;a++){
+    for(let b=1;b<=limit;b++){
+      if(Math.abs(r - a/b) < 0.008) return 'storage';
+    }
+  }
+  return 'mix';
+}
+
+function updateModeDisplay(){
+  const mode = getRatioMode();
+  const label = mode === 'query' ? 'QUERY' : mode === 'storage' ? 'STORAGE' : 'MIX';
+  const chip = document.getElementById('chip-mode');
+  if(chip) chip.textContent = label;
+  const mm = document.getElementById('m-mode');
+  if(mm) mm.textContent = mode;
+  if(chip) chip.classList.toggle('on', mode === 'query');
+}
+
 let currentAccent = RATIO_COLORS[36];
 let targetAccent = RATIO_COLORS[36];
 function updateAccentColor(){
@@ -474,10 +504,16 @@ function updateAccentColor(){
 
 
 const SEQ_RATIOS = [
-  {x:1,y:1}, {x:2,y:1}, {x:2,y:3}, {x:3,y:2}, {x:3,y:4}, {x:4,y:3}, {x:3,y:5}, {x:5,y:3},
-  {x:4,y:5}, {x:5,y:4}, {x:5,y:6}, {x:6,y:5}, {x:1,y:1.618}, {x:1,y:2.618}, {x:1,y:1}, {x:2,y:1}
+  {x:1,y:1}, {x:2,y:1}, {x:2,y:3}, {x:3,y:2}, {x:3,y:4}, {x:4,y:3}, {x:4,y:5}, {x:5,y:4},
+  {x:3,y:5}, {x:5,y:3}, {x:1,y:1.618}, {x:1,y:2.618}, {x:1,y:1}, {x:2,y:1}, {x:2,y:3}, {x:3,y:2}
 ];
 let seqSteps = SEQ_RATIOS.map(r => ({...r}));
+
+// Secuencia inspirada en la portada del libro HIT: resonancia simultánea de 1:2:3:4:5
+const BEACON_SEQ = [
+  {x:1,y:1}, {x:1,y:2}, {x:2,y:3}, {x:3,y:4}, {x:4,y:5}, {x:3,y:5}, {x:2,y:1}, {x:3,y:2},
+  {x:4,y:3}, {x:5,y:4}, {x:5,y:3}, {x:5,y:6}, {x:1,y:1}, {x:1,y:2}, {x:2,y:3}, {x:3,y:4}
+];
 
 const KNOB_CCS = [86,87,89,90,110,111,116,117];
 const KNOB_CCS_ALT = [21,22,23,24,25,26,27,28];
@@ -551,7 +587,7 @@ function updateFrequencies(){
   oscillators.forEach(o=>{ const f=CONFIG.f0*o.n; o.freq=f; o.osc.frequency.setTargetAtTime(f,now,0.02); });
   if(lissX) lissX.frequency.setTargetAtTime(CONFIG.f0*CONFIG.ratioX,now,0.02);
   if(lissY) lissY.frequency.setTargetAtTime(CONFIG.f0*CONFIG.ratioY,now,0.02);
-  if(!CONFIG.activePreset) updateAccentColor();
+  if(!CONFIG.activePreset){ updateAccentColor(); updateModeDisplay(); }
 }
 
 function updateGains(){
@@ -655,7 +691,7 @@ function handleMIDI(msg){
 function applyPreset(note){
   const p=PAD_PRESETS[note]; if(!p) return;
   CONFIG.ratioX=p.ratioX; CONFIG.ratioY=p.ratioY; CONFIG.harmonics=p.harmonics; CONFIG.spread=p.spread; CONFIG.activePreset=note;
-  rebuildField(); updateFaders(); updateMetrics(); updatePads(); updateAccentColor();
+  rebuildField(); updateFaders(); updateMetrics(); updatePads(); updateAccentColor(); updateModeDisplay();
 }
 
 function doPadSecondary(note){
@@ -674,6 +710,12 @@ function doPadSecondary(note){
 function toggleShift(){ CONFIG.shift=!CONFIG.shift; updateChip('shift', CONFIG.shift); updatePads(); document.getElementById('btn-shift').classList.toggle('on', CONFIG.shift); }
 function toggleArp(){ CONFIG.arp=!CONFIG.arp; updateChip('arp', CONFIG.arp); document.getElementById('btn-arp').classList.toggle('on', CONFIG.arp); if(CONFIG.arp && !CONFIG.seq) toggleSeq(true); }
 function toggleSeq(force=false){ CONFIG.seq = force || !CONFIG.seq; document.getElementById('btn-seq').classList.toggle('on', CONFIG.seq); }
+function loadBeaconSequence(){
+  seqSteps = BEACON_SEQ.map(r => ({...r}));
+  CONFIG.seqStep = 0;
+  renderSeq();
+  logMidi('Secuencia BEACON cargada: 1:2:3:4:5', 'warn');
+}
 function saveCurrentToStep(){ seqSteps[CONFIG.seqStep] = {x:CONFIG.ratioX, y:CONFIG.ratioY}; renderSeq(); logMidi(`Step ${CONFIG.seqStep+1} guardado ${CONFIG.ratioX}:${CONFIG.ratioY}`, 'warn'); }
 function clearSeq(){ seqSteps = SEQ_RATIOS.map(r=>({...r})); renderSeq(); logMidi('Secuencia limpiada', 'warn'); }
 
@@ -957,7 +999,7 @@ function renderSeq(){
 
 function updateMetrics(){
   const color = currentAccent;
-  const ids = ['m-f0','m-harm','m-spread','m-ratio','m-phase','m-vol','m-pert','m-preset'];
+  const ids = ['m-f0','m-harm','m-spread','m-ratio','m-mode','m-phase','m-vol','m-pert','m-preset'];
   ids.forEach(id=> document.getElementById(id).style.color = color);
   document.getElementById('m-f0').textContent=CONFIG.f0.toFixed(1)+' Hz';
   document.getElementById('m-harm').textContent=CONFIG.harmonics;
@@ -967,6 +1009,7 @@ function updateMetrics(){
   document.getElementById('m-vol').textContent=CONFIG.volume.toFixed(2);
   document.getElementById('m-pert').textContent=CONFIG.perturb.toFixed(2);
   document.getElementById('m-preset').textContent = CONFIG.activePreset ? PAD_PRESETS[CONFIG.activePreset].name : '—';
+  updateModeDisplay();
 }
 function updateChip(id, on){ document.getElementById('chip-'+id).classList.toggle('on', on); }
 
@@ -1148,6 +1191,7 @@ function loop(){
 window.addEventListener('keydown', e=>{
   if(e.code==='Space'){ e.preventDefault(); toggleShift(); }
   if(e.code==='KeyA'){ toggleArp(); }
+  if(e.code==='KeyB'){ loadBeaconSequence(); }
 });
 
 document.getElementById('start-btn').addEventListener('click',()=>{
@@ -1156,6 +1200,7 @@ document.getElementById('start-btn').addEventListener('click',()=>{
 document.getElementById('btn-shift').addEventListener('click',toggleShift);
 document.getElementById('btn-arp').addEventListener('click',toggleArp);
 document.getElementById('btn-seq').addEventListener('click',()=>toggleSeq());
+document.getElementById('btn-beacon').addEventListener('click',loadBeaconSequence);
 document.getElementById('btn-save').addEventListener('click',saveCurrentToStep);
 document.getElementById('btn-clear').addEventListener('click',clearSeq);
 document.getElementById('btn-export').addEventListener('click', doExportWav);
