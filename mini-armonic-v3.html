@@ -170,6 +170,46 @@
       #app { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; grid-template-areas: "header" "left" "main" "right" "bottom"; overflow-y: auto; }
       #controls, #info { max-height: 220px; }
     }
+
+    /* export wav */
+    .rec-controls { display: flex; align-items: center; gap: 8px; pointer-events: auto; }
+    .rec-controls select {
+      background: var(--panel-elev); border: 1px solid var(--border); color: var(--text-sec);
+      font-family: var(--mono); font-size: 10px; padding: 4px 6px; border-radius: 5px; outline: none;
+    }
+    .rec-btn, .stop-btn {
+      font-family: var(--mono); font-size: 10px; font-weight: 600; padding: 5px 10px; border-radius: 5px;
+      border: 1px solid var(--border); background: var(--panel-elev); color: var(--text-muted); cursor: pointer; transition: 0.15s;
+    }
+    .rec-btn.on { background: var(--danger); color: #fff; border-color: var(--danger); box-shadow: 0 0 10px rgba(255,90,90,0.35); animation: pulse-rec 1.2s infinite; pointer-events: none; }
+    @keyframes pulse-rec { 0%,100%{ opacity:1; } 50%{ opacity:0.6; } }
+    .stop-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .stop-btn:not(:disabled):hover { border-color: var(--text); color: var(--text); }
+    .timer { font-family: var(--mono); font-size: 11px; color: var(--text-sec); min-width: 52px; text-align: center; }
+
+    /* takes */
+    #takes-list { display: flex; flex-direction: column; gap: 6px; max-height: 220px; overflow-y: auto; }
+    .take-empty { font-size: 10px; color: var(--text-muted); padding: 6px 0; }
+    .take-item {
+      background: var(--panel-elev); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .take-row { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .take-name {
+      flex: 1; background: transparent; border: none; border-bottom: 1px solid transparent; color: var(--text-sec);
+      font-family: var(--mono); font-size: 10px; padding: 1px 0;
+    }
+    .take-name:focus { outline: none; border-bottom-color: var(--accent); }
+    .take-time { font-family: var(--mono); font-size: 9px; color: var(--text-muted); white-space: nowrap; }
+    .take-actions { display: flex; gap: 4px; }
+    .take-btn {
+      flex: 1; text-align: center; font-size: 10px; padding: 3px 0; border-radius: 4px;
+      background: var(--panel); border: 1px solid var(--border); color: var(--text-muted); cursor: pointer; text-decoration: none;
+    }
+    .take-btn:hover { color: var(--text); border-color: var(--border); }
+    .take-btn.dl-btn:hover { color: var(--accent-2); }
+    .take-btn.del-btn:hover { color: var(--danger); }
+
   </style>
 </head>
 <body>
@@ -190,6 +230,17 @@
         <div class="chip" id="chip-midi">MIDI —</div>
         <div class="chip" id="chip-shift">SHIFT</div>
         <div class="chip" id="chip-arp">ARP</div>
+      </div>
+      <div class="rec-controls">
+        <select id="export-duration" title="Duración del render">
+          <option value="5">5s</option>
+          <option value="10" selected>10s</option>
+          <option value="30">30s</option>
+          <option value="60">60s</option>
+        </select>
+        <button class="rec-btn" id="btn-export">EXPORT WAV</button>
+        <button class="stop-btn" id="btn-export-cancel" disabled>CANCEL</button>
+        <span class="timer" id="export-timer">00:00.0</span>
       </div>
     </div>
 
@@ -219,6 +270,11 @@
     <div id="main"><canvas id="cv"></canvas></div>
 
     <div id="info">
+
+      <div class="ctrl-block">
+        <div class="section-title">Takes <span id="take-count" style="font-weight:400;color:var(--text-muted)">0</span></div>
+        <div id="takes-list"><div class="take-empty">Sin takes aún. Tocá EXPORT WAV para renderizar.</div></div>
+      </div>
       <div class="ctrl-block">
         <div class="section-title">Campo activo</div>
         <div class="metric"><span class="m-label">fundamental</span><span class="m-val" id="m-f0">110.0 Hz</span></div>
@@ -316,6 +372,10 @@ let learningIdx = null;
 // audio
 let audioCtx=null, masterGain=null, analyser=null;
 let oscillators=[], lissX=null, lissY=null;
+
+// exporter
+let isExporting=false, exportStartTime=0, exportTimerInterval=null, takes=[];
+let currentTakeAudio=null;
 
 function midiToFreq(note){ return 440 * Math.pow(2, (note - 69)/12); }
 
@@ -492,6 +552,191 @@ function toggleArp(){ CONFIG.arp=!CONFIG.arp; updateChip('arp', CONFIG.arp); doc
 function toggleSeq(force=false){ CONFIG.seq = force || !CONFIG.seq; document.getElementById('btn-seq').classList.toggle('on', CONFIG.seq); }
 function saveCurrentToStep(){ seqSteps[CONFIG.seqStep] = {x:CONFIG.ratioX, y:CONFIG.ratioY}; renderSeq(); logMidi(`Step ${CONFIG.seqStep+1} guardado ${CONFIG.ratioX}:${CONFIG.ratioY}`, 'warn'); }
 function clearSeq(){ seqSteps = SEQ_RATIOS.map(r=>({...r})); renderSeq(); logMidi('Secuencia limpiada', 'warn'); }
+
+
+// ---------- export WAV via OfflineAudioContext ----------
+function formatTime(ms){
+  const s = Math.floor(ms/1000);
+  const m = Math.floor(s/60);
+  const secs = String(s%60).padStart(2,'0');
+  const tenths = Math.floor((ms%1000)/100);
+  return m+':'+secs+'.'+tenths;
+}
+
+async function renderWavExport(){
+  if(!audioCtx) initAudio();
+  if(!audioCtx) return;
+  const duration = Number(document.getElementById('export-duration').value);
+  const sampleRate = audioCtx.sampleRate;
+  const offline = new OfflineAudioContext(2, duration * sampleRate, sampleRate);
+
+  // reconstruir graph en offline context
+  const mg = offline.createGain();
+  mg.gain.value = CONFIG.volume;
+  mg.connect(offline.destination);
+
+  // harmonic field
+  for(let n=1; n<=CONFIG.harmonics; n++){
+    const osc = offline.createOscillator(), g = offline.createGain();
+    osc.type = CONFIG.waveform;
+    osc.frequency.value = CONFIG.f0 * n;
+    const amp = Math.pow(n, -CONFIG.spread) * (1/Math.max(1, CONFIG.harmonics));
+    g.gain.value = amp;
+    osc.connect(g); g.connect(mg);
+    osc.start(0); osc.stop(duration);
+  }
+
+  // Lissajous carriers
+  const lx = offline.createOscillator(), ly = offline.createOscillator();
+  const glx = offline.createGain(), gly = offline.createGain();
+  lx.type = CONFIG.waveform; ly.type = CONFIG.waveform;
+  lx.frequency.value = CONFIG.f0 * CONFIG.ratioX;
+  ly.frequency.value = CONFIG.f0 * CONFIG.ratioY;
+  glx.gain.value = 0.08; gly.gain.value = 0.08;
+  lx.connect(glx); glx.connect(mg);
+  ly.connect(gly); gly.connect(mg);
+  lx.start(0); lx.stop(duration);
+  ly.start(0); ly.stop(duration);
+
+  const rendered = await offline.startRendering();
+  const blob = audioBufferToWav(rendered);
+  const url = URL.createObjectURL(blob);
+  takes.unshift({
+    id: Date.now(),
+    name: 'take-'+String(takes.length+1).padStart(3,'0'),
+    duration: duration * 1000,
+    blob, url
+  });
+  renderTakes();
+  logMidi('WAV renderizado: '+duration+'s @ '+sampleRate+'Hz', 'warn');
+}
+
+function audioBufferToWav(buffer){
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const format = 1; // PCM
+  const bitDepth = 16;
+  const bytesPerSample = bitDepth / 8;
+  const blockAlign = numChannels * bytesPerSample;
+  const byteRate = sampleRate * blockAlign;
+  const dataLength = buffer.length * blockAlign;
+  const arrayBuffer = new ArrayBuffer(44 + dataLength);
+  const view = new DataView(arrayBuffer);
+  const channels = [];
+  for(let c=0; c<numChannels; c++) channels.push(buffer.getChannelData(c));
+
+  const writeStr = (offset, str)=>{ for(let i=0;i<str.length;i++) view.setUint8(offset+i, str.charCodeAt(i)); };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataLength, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, format, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitDepth, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  let offset = 44;
+  for(let i=0; i<buffer.length; i++){
+    for(let c=0; c<numChannels; c++){
+      let sample = Math.max(-1, Math.min(1, channels[c][i]));
+      sample = sample < 0 ? sample * 0x8000 : sample * 0x7FFF;
+      view.setInt16(offset, sample, true);
+      offset += 2;
+    }
+  }
+  return new Blob([arrayBuffer], { type:'audio/wav' });
+}
+
+function startExportTimer(){
+  stopExportTimer();
+  exportStartTime = performance.now();
+  isExporting = true;
+  document.getElementById('btn-export').classList.add('on');
+  document.getElementById('btn-export').textContent = 'RENDER...';
+  document.getElementById('btn-export-cancel').disabled = false;
+  exportTimerInterval = setInterval(()=>{
+    document.getElementById('export-timer').textContent = formatTime(performance.now() - exportStartTime);
+  }, 100);
+}
+function stopExportTimer(){
+  isExporting = false;
+  if(exportTimerInterval){ clearInterval(exportTimerInterval); exportTimerInterval = null; }
+  document.getElementById('btn-export').classList.remove('on');
+  document.getElementById('btn-export').textContent = 'EXPORT WAV';
+  document.getElementById('btn-export-cancel').disabled = true;
+  document.getElementById('export-timer').textContent = '00:00.0';
+}
+
+async function doExportWav(){
+  if(isExporting) return;
+  startExportTimer();
+  try{
+    await renderWavExport();
+  }catch(err){
+    console.error(err);
+    logMidi('Error renderizando WAV: '+err.message, 'unknown');
+  }
+  stopExportTimer();
+}
+function cancelExportWav(){ /* el render no se puede cancelar realmente */ }
+
+function renderTakes(){
+  const list = document.getElementById('takes-list');
+  document.getElementById('take-count').textContent = takes.length;
+  if(takes.length === 0){ list.innerHTML = '<div class="take-empty">Sin takes aún. Tocá EXPORT WAV para renderizar.</div>'; return; }
+  list.innerHTML = '';
+  takes.forEach((take, idx)=>{
+    const d = document.createElement('div'); d.className='take-item';
+    d.innerHTML = '<div class="take-row">'+
+      '<input class="take-name" value="'+take.name+'" data-idx="'+idx+'">'+
+      '<span class="take-time">'+formatTime(take.duration)+'</span></div>'+
+      '<div class="take-actions">'+
+      '<button class="take-btn play-btn" data-idx="'+idx+'">▶</button>'+
+      '<a class="take-btn dl-btn" href="'+take.url+'" download="'+take.name+'.wav">↓</a>'+
+      '<button class="take-btn del-btn" data-idx="'+idx+'">×</button></div>';
+    list.appendChild(d);
+  });
+  list.querySelectorAll('.take-name').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      const idx = Number(e.target.dataset.idx);
+      takes[idx].name = e.target.value;
+      e.target.closest('.take-item').querySelector('.dl-btn').download = e.target.value + '.wav';
+    });
+  });
+  list.querySelectorAll('.play-btn').forEach(b=>{
+    b.addEventListener('click', ()=> playTake(Number(b.dataset.idx)));
+  });
+  list.querySelectorAll('.del-btn').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const idx = Number(b.dataset.idx);
+      URL.revokeObjectURL(takes[idx].url);
+      takes.splice(idx, 1);
+      renderTakes();
+    });
+  });
+}
+
+function playTake(idx){
+  if(!audioCtx) initAudio();
+  const reader = new FileReader();
+  reader.onload = e => {
+    audioCtx.decodeAudioData(e.target.result, buffer=>{
+      if(currentTakeAudio){ currentTakeAudio.stop(); currentTakeAudio=null; }
+      const src = audioCtx.createBufferSource();
+      src.buffer = buffer;
+      src.connect(audioCtx.destination);
+      src.start();
+      currentTakeAudio = src;
+      src.onended = ()=>{ currentTakeAudio=null; };
+    });
+  };
+  reader.readAsArrayBuffer(takes[idx].blob);
+}
 
 // UI builders
 function buildFaders(){
@@ -742,6 +987,8 @@ document.getElementById('btn-arp').addEventListener('click',toggleArp);
 document.getElementById('btn-seq').addEventListener('click',()=>toggleSeq());
 document.getElementById('btn-save').addEventListener('click',saveCurrentToStep);
 document.getElementById('btn-clear').addEventListener('click',clearSeq);
+document.getElementById('btn-export').addEventListener('click', doExportWav);
+document.getElementById('btn-export-cancel').addEventListener('click', cancelExportWav);
 
 buildFaders(); buildPhysical(); buildPads(); buildSeq(); updateMetrics(); updatePads(); loop();
 </script>

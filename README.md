@@ -24,6 +24,7 @@ descargar el video original: [mini-armonic-demo.mp4](./mini-armonic-demo.mp4)
 - Muestra un **espectro** con etiquetas `1:n` de los armónicos.
 - Visualiza un **círculo armónico** con las proporciones distribuidas logarítmicamente.
 - Permite programar **16 pasos** de ratios y recorrerlos con un arpegiador.
+- **Exporta el campo armónico actual a WAV** usando `OfflineAudioContext` (calidad del sample rate del navegador, estéreo, 16-bit).
 - Loguea todos los mensajes MIDI entrantes en un **MIDI inspector** integrado.
 
 ---
@@ -52,6 +53,21 @@ http://localhost:8081/mini-armonic-v3.html
 Hacé clic en **INICIAR**, conectá tu controlador y empezá a explorar.
 
 > No funciona abriendo el archivo `.html` directamente porque Web MIDI está restringido a `localhost` o HTTPS.
+
+---
+
+## Exportar a WAV
+
+En el header hay un selector de duración (**5s / 10s / 30s / 60s**) y un botón **EXPORT WAV**. Al tocarlo, la app renderiza el campo armónico actual (con la configuración de f0, ratios, armónicos y spread vigente) a un archivo WAV estéreo de 16-bit usando `OfflineAudioContext`.
+
+Los renders aparecen en la sección **Takes** del panel derecho, donde podés:
+
+- Renombrarlos.
+- Reproducirlos.
+- Descargarlos como `.wav`.
+- Eliminarlos.
+
+El formato es PCM estándar, compatible con cualquier DAW.
 
 ---
 
@@ -139,6 +155,7 @@ Las notas del teclado (C3-C6 aprox.) cambian la frecuencia fundamental `f0` seg�
 | Funciones           | SHIFT, ARP, SEQ, SAVE, CLEAR.                        |
 | Canvas central      | Lissajous, espectro y círculo armónico.              |
 | Campo activo        | Métricas en tiempo real.                             |
+| Takes               | Renders WAV exportados con play/download/delete.     |
 | MIDI inspector      | Log de mensajes MIDI entrantes.                      |
 | Presets armónicos   | 8 pads de proporciones.                              |
 | Programador 16 pasos| Secuenciador de ratios.                              |
@@ -192,8 +209,8 @@ Sin dependencias externas. Servidor local solo para cumplir con las restriccione
 
 ## Roadmap
 
+- [x] Exportar campo armónico a WAV.
 - [ ] Loop/grabación de movimientos de knobs.
-- [ ] Exportar campo armónico a WAV.
 - [ ] Presets guardables en `localStorage`.
 - [ ] Integración con DAW vía MIDI o WebSocket.
 - [ ] Modo osciloscopio XY a pantalla completa.
