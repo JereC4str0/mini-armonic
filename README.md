@@ -20,9 +20,10 @@ descargar el video original: [mini-armonic-demo.mp4](./mini-armonic-demo.mp4)
 
 - Genera un campo armónico sostenido a partir de una frecuencia fundamental `f0`.
 - Superpone armónicos con un spread configurable.
-- Dibuja una figura de **Lissajous** con el ratio activo.
-- Muestra un **espectro** con etiquetas `1:n` de los armónicos.
-- Visualiza un **círculo armónico** con las proporciones distribuidas logarítmicamente.
+- Dibuja una figura de **Lissajous** con el ratio activo, color propio por proporción y estela luminosa.
+- Muestra un **espectro** coloreado dinámicamente según el ratio activo.
+- Visualiza un **círculo armónico** con los armónicos coloreados por su relación con `f0`.
+- Cada **preset de pad** tiene un color distintivo que se propaga por toda la interfaz.
 - Permite programar **16 pasos** de ratios y recorrerlos con un arpegiador.
 - **Exporta el campo armónico actual a WAV** usando `OfflineAudioContext` (calidad del sample rate del navegador, estéreo, 16-bit).
 - Loguea todos los mensajes MIDI entrantes en un **MIDI inspector** integrado.
@@ -154,7 +155,8 @@ Las notas del teclado (C3-C6 aprox.) cambian la frecuencia fundamental `f0` seg�
 | Faders físicos      | 4 slots con modo learn para faders reales.           |
 | Funciones           | SHIFT, ARP, SEQ, SAVE, CLEAR.                        |
 | Canvas central      | Lissajous, espectro y círculo armónico.              |
-| Campo activo        | Métricas en tiempo real.                             |
+| Modo focus          | Botón □ para enfocar solo el canvas.                 |
+| Campo activo        | Métricas en tiempo real, coloreadas por ratio.       |
 | Takes               | Renders WAV exportados con play/download/delete.     |
 | MIDI inspector      | Log de mensajes MIDI entrantes.                      |
 | Presets armónicos   | 8 pads de proporciones.                              |
@@ -164,9 +166,23 @@ Las notas del teclado (C3-C6 aprox.) cambian la frecuencia fundamental `f0` seg�
 
 ## Visualización
 
-- **Lissajous**: figura XY que dibuja la proporción activa `ratioX : ratioY`.
-- **Espectro**: barras frecuenciales con etiquetas `1:n` de armónicos detectados.
-- **Círculo armónico**: armónicos `1:n` distribuidos logarítmicamente alrededor de `f0`.
+- **Lissajous**: figura XY con trail degradado, glow difuso y marcador de fase. El color del trazo cambia según el ratio activo.
+- **Espectro**: barras frecuenciales con gradiente dinámico coloreado por el ratio activo. Etiquetas `1:n` en los picos armónicos detectados.
+- **Círculo armónico**: armónicos `1:n` distribuidos logarítmicamente alrededor de `f0`, coloreados con variantes del color del ratio activo.
+- **Paleta cromática**: cada preset de pad tiene un color asignado que se propaga al acento de la interfaz, sliders, métricas y visualizaciones.
+
+### Colores por preset
+
+| Pad | Ratio | Color      |
+|-----|-------|------------|
+| 1   | 1:1   | violeta    |
+| 2   | 1:2   | cian       |
+| 3   | 2:3   | índigo     |
+| 4   | 3:4   | menta      |
+| 5   | 3:5   | ámbar      |
+| 6   | 4:5   | naranja    |
+| 7   | φ     | dorado     |
+| 8   | φ²    | rosa coral |
 
 ---
 
