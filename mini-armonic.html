@@ -144,6 +144,20 @@
     .funcbtn:hover { color: var(--text); }
     .funcbtn.on { background: rgba(123,97,255,0.15); border-color: var(--accent); color: var(--text); }
 
+    /* beacon controls */
+    .beacon-controls { display: flex; flex-direction: column; gap: 8px; height: 100%; justify-content: center; }
+    .bpm-row { display: flex; align-items: baseline; gap: 6px; }
+    .bpm-display { font-family: var(--mono); font-size: 28px; font-weight: 600; color: var(--text); line-height: 1; }
+    .bpm-unit { font-size: 10px; color: var(--text-muted); }
+    .bpm-slider { width: 100%; margin: 0; }
+    .beacon-row { display: flex; gap: 6px; align-items: center; }
+    .beacon-select {
+      flex: 1; background: var(--panel-elev); border: 1px solid var(--border); color: var(--text-sec);
+      font-family: var(--mono); font-size: 10px; padding: 5px 6px; border-radius: 5px; outline: none;
+    }
+    .beacon-hint { font-size: 9px; color: var(--text-muted); margin-top: 2px; }
+    .beacon-hint kbd { font-size: 9px; padding: 1px 3px; }
+
     .seqgrid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 4px; height: 100%; }
     .step {
       border-radius: 4px; background: rgba(255,255,255,0.04); border: 1px solid var(--border-sub);
@@ -375,6 +389,28 @@
         <div class="section-title" style="margin-top:8px">Beacons de usuario <span style="font-weight:400;color:var(--text-muted)">— click cargar / shift+click guardar</span></div>
         <div class="beacongrid" id="beacongrid"></div>
       </div>
+      <div class="panel" style="flex:0.9">
+        <div class="section-title">Beacon</div>
+        <div class="beacon-controls">
+          <div class="bpm-row">
+            <div class="bpm-display" id="beacon-bpm-display">120</div>
+            <div class="bpm-unit">BPM</div>
+          </div>
+          <input type="range" id="beacon-bpm" min="30" max="300" value="120" class="bpm-slider">
+          <div class="beacon-row">
+            <button class="funcbtn" id="btn-tap">TAP</button>
+            <select id="beacon-mode" class="beacon-select">
+              <option value="forward">▶ forward</option>
+              <option value="reverse">◀ reverse</option>
+              <option value="pingpong">↔ ping-pong</option>
+              <option value="random">? random</option>
+              <option value="manual">⌖ manual</option>
+            </select>
+            <button class="funcbtn" id="beacon-loop">LOOP</button>
+          </div>
+          <div class="beacon-hint"><kbd>P</kbd> play · <kbd>↑</kbd><kbd>↓</kbd> BPM · <kbd>←</kbd><kbd>→</kbd> modo · <kbd>&lt;</kbd><kbd>&gt;</kbd> beacon</div>
+        </div>
+      </div>
       <div class="panel" style="flex:1.2">
         <div class="section-title">Programador 16 pasos</div>
         <div class="seqgrid" id="seqgrid"></div>
@@ -402,7 +438,11 @@ const CONFIG = {
   arp: false,
   seq: false,
   seqStep: 0,
-  octave: 0
+  octave: 0,
+  bpm: 120,
+  traversalMode: 'forward', // forward | reverse | pingpong | random | manual
+  loop: true,
+  seqDirection: 1
 };
 
 const FADERS = [
@@ -461,8 +501,11 @@ function colorWithAlpha(hex, alpha){
 
 function getRatioColor(){
   if(CONFIG.activePreset && RATIO_COLORS[CONFIG.activePreset]) return RATIO_COLORS[CONFIG.activePreset];
-  // derivar color del ratio actual interpolando entre presets cercanos
-  const ratioVal = CONFIG.ratioY / Math.max(0.001, CONFIG.ratioX);
+  return colorForRatio(CONFIG.ratioX, CONFIG.ratioY);
+}
+
+function colorForRatio(rx, ry){
+  const ratioVal = ry / Math.max(0.001, rx);
   const sorted = Object.keys(PAD_PRESETS).map(Number).sort((a,b)=>a-b);
   for(let i=0;i<sorted.length-1;i++){
     const pA=PAD_PRESETS[sorted[i]], pB=PAD_PRESETS[sorted[i+1]];
@@ -545,7 +588,17 @@ function loadUserBeacons(){
     if(raw){
       const parsed = JSON.parse(raw);
       if(Array.isArray(parsed) && parsed.length===8){
-        userBeacons = parsed.map(b => b && b.steps && b.steps.length===16 ? b : null);
+        userBeacons = parsed.map((b, idx) => {
+          if(!b || !Array.isArray(b.steps) || b.steps.length!==16) return null;
+          return {
+            name: b.name || defaultBeaconName(idx),
+            steps: b.steps.map(s => ({x:s.x, y:s.y})),
+            bpm: typeof b.bpm === 'number' ? b.bpm : (typeof b.tempo === 'number' ? Math.round(60000/b.tempo) : 120),
+            traversalMode: b.traversalMode || b.mode || 'forward',
+            loop: typeof b.loop === 'boolean' ? b.loop : true,
+            created: b.created || Date.now()
+          };
+        });
       }
     }
   }catch(e){ console.error('Error cargando beacons', e); }
@@ -562,8 +615,9 @@ function saveBeaconSlot(slot){
   const b = {
     name: defaultBeaconName(slot),
     steps: seqSteps.map(s => ({...s})),
-    tempo: 250,
-    mode: 'forward',
+    bpm: CONFIG.bpm,
+    traversalMode: CONFIG.traversalMode,
+    loop: CONFIG.loop,
     created: Date.now()
   };
   userBeacons[slot] = b;
@@ -576,13 +630,17 @@ function loadBeaconSlot(slot){
   const b = userBeacons[slot];
   if(!b) return;
   seqSteps = b.steps.map(s => ({...s}));
-  CONFIG.seqStep = 0;
+  CONFIG.seqStep = 0; CONFIG.seqDirection = 1;
+  CONFIG.bpm = b.bpm ?? 120;
+  CONFIG.traversalMode = b.traversalMode ?? 'forward';
+  CONFIG.loop = b.loop ?? true;
   const s = seqSteps[0];
   CONFIG.ratioX = s.x; CONFIG.ratioY = s.y; CONFIG.activePreset = null;
   resetLissTime();
   if(!CONFIG.arp) toggleArp(true);
   if(!CONFIG.seq) toggleSeq(true);
   activeBeaconSlot = slot;
+  updateBeaconUI();
   updateFrequencies(); updateFaders(); updateMetrics(); renderSeq(); renderBeaconSlots();
   logMidi(`Beacon ${slot+1} cargado: ${b.name}`, 'warn');
 }
@@ -629,14 +687,29 @@ const KNOB_CCS = [86,87,89,90,110,111,116,117];
 const KNOB_CCS_ALT = [21,22,23,24,25,26,27,28];
 function knobIndex(cc) { let i=KNOB_CCS.indexOf(cc); return i>=0?i:KNOB_CCS_ALT.indexOf(cc); }
 
-// 4 physical fader slots
+// 4 physical fader slots (can target any CONFIG key including 'bpm')
 const PHYSICAL = [
   { label: 'Fader 1', cc: null, target: 'f0' },
   { label: 'Fader 2', cc: null, target: 'volume' },
-  { label: 'Fader 3', cc: null, target: 'ratioX' },
+  { label: 'Fader 3', cc: null, target: 'bpm' },
   { label: 'Fader 4', cc: null, target: 'ratioY' }
 ];
 let learningIdx = null;
+
+function targetLabel(target){
+  if(target==='bpm') return 'BPM';
+  const f=FADERS.find(x=>x.key===target);
+  return f ? f.label : target;
+}
+function targetRange(target){
+  if(target==='bpm') return {min:30, max:300, int:true, fmt:v=>v};
+  const f=FADERS.find(x=>x.key===target);
+  return f ? {min:f.min, max:f.max, int:f.int, fmt:f.fmt} : {min:0, max:1, int:false, fmt:v=>v};
+}
+function setTargetValue(target, v){
+  if(target==='bpm'){ setBPM(v); return; }
+  CONFIG[target]=v;
+}
 
 // audio
 let audioCtx=null, masterGain=null, analyser=null;
@@ -749,20 +822,21 @@ function handleMIDI(msg){
     for(let i=0;i<PHYSICAL.length;i++){
       const phy=PHYSICAL[i];
       if(phy.cc===note){
+        const range = targetRange(phy.target);
+        let v = range.min + (vel/127)*(range.max-range.min);
+        if(range.int) v=Math.round(v);
+        setTargetValue(phy.target, v);
         const f=FADERS.find(x=>x.key===phy.target);
         if(f){
-          let v = f.min + (vel/127)*(f.max-f.min);
-          if(f.int) v=Math.round(v);
-          CONFIG[f.key]=v;
           const idx=FADERS.indexOf(f);
           updateFader(idx);
           if(['f0','ratioX','ratioY','phase','perturb'].includes(f.key)) updateFrequencies();
           if(['harmonics','spread'].includes(f.key)){ if(f.key==='harmonics') rebuildField(); else updateGains(); }
           if(f.key==='volume') applyVolume();
-          updateMetrics();
-          logMidi(`${phy.label} CC${note} ${vel} → ${f.label}=${f.fmt(v)}`);
-          return;
         }
+        updateMetrics();
+        logMidi(`${phy.label} CC${note} ${vel} → ${targetLabel(phy.target)}=${range.fmt(v)}`);
+        return;
       }
     }
 
@@ -830,17 +904,15 @@ function toggleArp(force=false){ CONFIG.arp = force || !CONFIG.arp; updateChip('
 function toggleSeq(force=false){ CONFIG.seq = force || !CONFIG.seq; document.getElementById('btn-seq').classList.toggle('on', CONFIG.seq); }
 function loadBeaconSequence(){
   seqSteps = BEACON_SEQ.map(r => ({...r}));
-  CONFIG.seqStep = 0;
-  // aplicar el primer paso inmediatamente para que el gráfico responda al toque
+  CONFIG.seqStep = 0; CONFIG.seqDirection = 1;
+  CONFIG.bpm = 120; CONFIG.traversalMode = 'forward'; CONFIG.loop = true;
   const s = seqSteps[0];
   CONFIG.ratioX = s.x; CONFIG.ratioY = s.y; CONFIG.activePreset = null;
-  // reiniciar fase para que la figura sea exacta
   resetLissTime();
-  // encender arp y seq si no están
   if(!CONFIG.arp) toggleArp(true);
   if(!CONFIG.seq) toggleSeq(true);
-  // mensaje visual en el canvas
   showBeaconMessage();
+  updateBeaconUI();
   updateFrequencies(); updateFaders(); updateMetrics(); renderSeq();
   logMidi('Secuencia BEACON cargada: 1:2:3:4:5', 'warn');
 }
@@ -1080,7 +1152,7 @@ function buildPhysical(){
   PHYSICAL.forEach((p,i)=>{
     const d=document.createElement('div'); d.className='phy-slot'+(p.cc!==null?' assigned':''); d.id='phy-'+i;
     d.innerHTML = `<div class="phylabel"><span>${p.label}</span><button class="learn-btn" data-idx="${i}">LEARN</button></div>
-                   <div class="phycell">CC: ${p.cc!==null?p.cc:'—'} → ${FADERS.find(f=>f.key===p.target).label}</div>`;
+                   <div class="phycell">CC: ${p.cc!==null?p.cc:'—'} → ${targetLabel(p.target)}</div>`;
     g.appendChild(d);
   });
   g.querySelectorAll('.learn-btn').forEach(b=>b.addEventListener('click',()=>{
@@ -1094,7 +1166,7 @@ function renderPhysical(){
   PHYSICAL.forEach((p,i)=>{
     const d=document.getElementById('phy-'+i);
     d.classList.toggle('assigned', p.cc!==null);
-    d.querySelector('.phycell').textContent = `CC: ${p.cc!==null?p.cc:'—'} → ${FADERS.find(f=>f.key===p.target).label}`;
+    d.querySelector('.phycell').textContent = `CC: ${p.cc!==null?p.cc:'—'} → ${targetLabel(p.target)}`;
     const b=d.querySelector('.learn-btn');
     b.classList.toggle('on', learningIdx===i);
     b.textContent = learningIdx===i ? '...' : 'LEARN';
@@ -1159,15 +1231,144 @@ function updateMetrics(){
 }
 function updateChip(id, on){ document.getElementById('chip-'+id).classList.toggle('on', on); }
 
-// arpeggiator / sequencer loop
-setInterval(()=>{
-  if(!CONFIG.seq || !CONFIG.arp) return;
-  CONFIG.seqStep = (CONFIG.seqStep + 1) % 16;
-  const s = seqSteps[CONFIG.seqStep];
+// arpeggiator / sequencer scheduler (BPM-based)
+let seqTimer = null;
+let nextStepTime = 0;
+let tapTimes = [];
+
+function stepIntervalMs(){ return 60000 / CONFIG.bpm / 4; } // 16th notes at BPM
+
+function computeNextStep(){
+  const n = 16;
+  let next = CONFIG.seqStep;
+  if(CONFIG.traversalMode === 'forward'){
+    next = (CONFIG.seqStep + 1) % n;
+    if(next === 0 && !CONFIG.loop) return -1;
+  } else if(CONFIG.traversalMode === 'reverse'){
+    next = (CONFIG.seqStep - 1 + n) % n;
+    if(next === n-1 && !CONFIG.loop) return -1;
+  } else if(CONFIG.traversalMode === 'pingpong'){
+    next = CONFIG.seqStep + CONFIG.seqDirection;
+    if(next >= n){ next = n-2; CONFIG.seqDirection = -1; }
+    if(next < 0){ next = 1; CONFIG.seqDirection = 1; }
+    if((next === 0 || next === n-1) && !CONFIG.loop) return -1;
+  } else if(CONFIG.traversalMode === 'random'){
+    next = Math.floor(Math.random() * n);
+  } else if(CONFIG.traversalMode === 'manual'){
+    return -1; // no auto advance
+  }
+  return next;
+}
+
+function applyStep(idx){
+  if(idx < 0 || idx >= seqSteps.length) return;
+  CONFIG.seqStep = idx;
+  const s = seqSteps[idx];
   CONFIG.ratioX = s.x; CONFIG.ratioY = s.y; CONFIG.activePreset = null;
   resetLissTime();
   updateFrequencies(); updateMetrics(); updateFaders(); renderSeq();
-}, 250);
+}
+
+function scheduleStep(){
+  if(!CONFIG.seq || !CONFIG.arp || CONFIG.traversalMode === 'manual'){
+    seqTimer = null; return;
+  }
+  const now = performance.now();
+  if(nextStepTime === 0) nextStepTime = now + stepIntervalMs();
+  const wait = Math.max(0, nextStepTime - now);
+  seqTimer = setTimeout(()=>{
+    const next = computeNextStep();
+    if(next < 0){ stopSequencer(); return; }
+    applyStep(next);
+    nextStepTime += stepIntervalMs();
+    scheduleStep();
+  }, wait);
+}
+
+function startSequencer(){
+  if(seqTimer) return;
+  nextStepTime = performance.now() + stepIntervalMs();
+  scheduleStep();
+}
+function stopSequencer(){
+  if(seqTimer){ clearTimeout(seqTimer); seqTimer = null; }
+  nextStepTime = 0;
+}
+
+// sync toggles with scheduler
+const _origToggleArp = toggleArp;
+toggleArp = function(force){
+  const was = CONFIG.arp;
+  CONFIG.arp = (typeof force === 'boolean') ? force : !CONFIG.arp;
+  updateChip('arp', CONFIG.arp); document.getElementById('btn-arp').classList.toggle('on', CONFIG.arp);
+  if(CONFIG.arp && !CONFIG.seq) toggleSeq(true);
+  if(!CONFIG.arp) stopSequencer();
+  else if(CONFIG.seq) startSequencer();
+};
+const _origToggleSeq = toggleSeq;
+toggleSeq = function(force){
+  CONFIG.seq = (typeof force === 'boolean') ? force : !CONFIG.seq;
+  document.getElementById('btn-seq').classList.toggle('on', CONFIG.seq);
+  if(CONFIG.seq && CONFIG.arp) startSequencer();
+  else stopSequencer();
+};
+
+function tapTempo(){
+  const now = performance.now();
+  tapTimes = tapTimes.filter(t => now - t < 2000);
+  tapTimes.push(now);
+  if(tapTimes.length > 1){
+    const intervals = [];
+    for(let i=1;i<tapTimes.length;i++) intervals.push(tapTimes[i]-tapTimes[i-1]);
+    const avg = intervals.reduce((a,b)=>a+b,0)/intervals.length;
+    setBPM(Math.round(60000 / avg));
+  }
+}
+
+function setBPM(v){
+  CONFIG.bpm = Math.max(30, Math.min(300, Math.round(v)));
+  if(seqTimer){
+    // resync next step to new interval, keeping phase
+    const elapsed = performance.now() - (nextStepTime - stepIntervalMs());
+    nextStepTime = performance.now() + Math.max(0, stepIntervalMs() - elapsed);
+  }
+  updateBeaconUI();
+  logMidi(`BPM ${CONFIG.bpm}`, 'warn');
+}
+
+function setTraversalMode(mode){
+  if(!['forward','reverse','pingpong','random','manual'].includes(mode)) return;
+  CONFIG.traversalMode = mode;
+  CONFIG.seqDirection = 1;
+  updateBeaconUI();
+  logMidi(`Modo ${mode}`, 'warn');
+}
+
+function cycleTraversalMode(dir){
+  const modes = ['forward','reverse','pingpong','random','manual'];
+  const idx = modes.indexOf(CONFIG.traversalMode);
+  const next = (idx + dir + modes.length) % modes.length;
+  setTraversalMode(modes[next]);
+}
+
+function toggleLoop(){
+  CONFIG.loop = !CONFIG.loop;
+  updateBeaconUI();
+  logMidi(CONFIG.loop ? 'LOOP ON' : 'LOOP ONE-SHOT', 'warn');
+}
+
+function updateBeaconUI(){
+  const bpmEl = document.getElementById('beacon-bpm');
+  if(bpmEl) bpmEl.value = CONFIG.bpm;
+  const disp = document.getElementById('beacon-bpm-display');
+  if(disp) disp.textContent = CONFIG.bpm;
+  const modeSel = document.getElementById('beacon-mode');
+  if(modeSel) modeSel.value = CONFIG.traversalMode;
+  const loopBtn = document.getElementById('beacon-loop');
+  if(loopBtn) loopBtn.classList.toggle('on', CONFIG.loop);
+}
+
+// old setInterval removed; scheduler above drives the sequencer
 
 // canvas
 const main=document.getElementById('main'), canvas=document.getElementById('cv'), ctx=canvas.getContext('2d');
@@ -1367,12 +1568,78 @@ function drawHUD(w,h){
   ctx.textAlign='left';
 }
 
+function drawBeaconPath(w,h){
+  // constelación de los 16 pasos en esquina inferior izquierda
+  const pw=Math.min(180, w*0.20), ph=Math.min(160, h*0.34);
+  const px=18, py=h-ph-14;
+  const pad=22;
+
+  // fondo
+  ctx.save();
+  ctx.fillStyle='rgba(10,8,18,0.72)';
+  ctx.strokeStyle=colorWithAlpha(currentAccent, 0.30);
+  ctx.shadowBlur=14; ctx.shadowColor=colorWithAlpha(currentAccent, 0.22);
+  ctx.beginPath(); ctx.roundRect(px-8, py-8, pw+16, ph+16, 8); ctx.fill(); ctx.stroke();
+  ctx.restore();
+
+  ctx.fillStyle='var(--text-muted)'; ctx.font='600 9px var(--font)';
+  ctx.fillText('BEACON PATH', px+4, py+4);
+
+  // calcular bounds con margen
+  const xs=seqSteps.map(s=>s.x), ys=seqSteps.map(s=>s.y);
+  let minX=Math.min(...xs), maxX=Math.max(...xs);
+  let minY=Math.min(...ys), maxY=Math.max(...ys);
+  if(minX===maxX){ minX-=0.5; maxX+=0.5; }
+  if(minY===maxY){ minY-=0.5; maxY+=0.5; }
+  const rangeX=maxX-minX, rangeY=maxY-minY;
+  const cx=px+pad+(pw-pad*2)/2, cy=py+ph-pad-(ph-pad*2)/2;
+  const sx=(pw-pad*2)/rangeX*0.85, sy=(ph-pad*2)/rangeY*0.85;
+
+  function map(s){
+    return {
+      x: cx + (s.x - (minX+maxX)/2) * sx,
+      y: cy - (s.y - (minY+maxY)/2) * sy
+    };
+  }
+
+  // trayectoria
+  ctx.save();
+  ctx.lineWidth=1.5; ctx.lineCap='round'; ctx.lineJoin='round';
+  ctx.shadowBlur=10; ctx.shadowColor=colorWithAlpha(currentAccent, 0.35);
+  for(let i=0;i<seqSteps.length;i++){
+    const a=map(seqSteps[i]), b=map(seqSteps[(i+1)%seqSteps.length]);
+    const c=colorForRatio(seqSteps[i].x, seqSteps[i].y);
+    ctx.strokeStyle=colorWithAlpha(c, 0.45);
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+  ctx.restore();
+
+  // puntos
+  for(let i=0;i<seqSteps.length;i++){
+    const p=map(seqSteps[i]);
+    const c=colorForRatio(seqSteps[i].x, seqSteps[i].y);
+    const active = i===CONFIG.seqStep;
+    ctx.save();
+    ctx.fillStyle=c;
+    ctx.shadowBlur=active?14:6; ctx.shadowColor=colorWithAlpha(c, active?0.8:0.4);
+    ctx.beginPath(); ctx.arc(p.x,p.y, active?4:2, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+    if(active){
+      ctx.save();
+      ctx.strokeStyle='#fff'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.arc(p.x,p.y,7,0,Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+}
+
 function loop(){
   ctx.fillStyle='rgba(5,4,10,0.48)';
   ctx.fillRect(0,0,canvas.width,canvas.height);
   drawLissajous(canvas.width,canvas.height);
   drawSpectrum(canvas.width,canvas.height);
   drawHarmonicCircle(canvas.width,canvas.height);
+  drawBeaconPath(canvas.width,canvas.height);
   drawBeaconMessage(canvas.width,canvas.height);
   drawHUD(canvas.width,canvas.height);
   requestAnimationFrame(loop);
@@ -1384,8 +1651,15 @@ window.addEventListener('keydown', e=>{
   if(e.code==='KeyA'){ toggleArp(); }
   if(e.code==='KeyB'){ loadBeaconSequence(); }
   if(e.code==='KeyP'){ e.preventDefault(); togglePlayPause(); }
-  if(e.code==='ArrowLeft'){ e.preventDefault(); prevBeaconSlot(); }
-  if(e.code==='ArrowRight'){ e.preventDefault(); nextBeaconSlot(); }
+  // beacon navigation: < >
+  if(e.code==='Comma'){ e.preventDefault(); prevBeaconSlot(); }
+  if(e.code==='Period'){ e.preventDefault(); nextBeaconSlot(); }
+  // BPM: up/down
+  if(e.code==='ArrowUp'){ e.preventDefault(); setBPM(CONFIG.bpm + 5); }
+  if(e.code==='ArrowDown'){ e.preventDefault(); setBPM(CONFIG.bpm - 5); }
+  // traversal mode: left/right
+  if(e.code==='ArrowLeft'){ e.preventDefault(); cycleTraversalMode(-1); }
+  if(e.code==='ArrowRight'){ e.preventDefault(); cycleTraversalMode(1); }
   // teclas 1-8 cargan beacons de usuario
   if(e.code.startsWith('Digit') && !e.shiftKey && !e.ctrlKey && !e.altKey){
     const n = parseInt(e.code.replace('Digit',''), 10);
@@ -1409,7 +1683,13 @@ document.getElementById('focus-btn').addEventListener('click', ()=>{
   document.getElementById('focus-btn').classList.toggle('on');
 });
 
-buildFaders(); buildPhysical(); buildPads(); buildSeq(); loadUserBeacons(); renderBeaconSlots(); updateMetrics(); updatePads(); updateAccentColor(); loop();
+// beacon controls
+document.getElementById('beacon-bpm').addEventListener('input', e=> setBPM(Number(e.target.value)));
+document.getElementById('btn-tap').addEventListener('click', tapTempo);
+document.getElementById('beacon-mode').addEventListener('change', e=> setTraversalMode(e.target.value));
+document.getElementById('beacon-loop').addEventListener('click', toggleLoop);
+
+buildFaders(); buildPhysical(); buildPads(); buildSeq(); loadUserBeacons(); renderBeaconSlots(); updateMetrics(); updatePads(); updateAccentColor(); updateBeaconUI(); loop();
 </script>
 </body>
 </html>

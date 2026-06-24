@@ -112,7 +112,7 @@ Por defecto los slots controlan:
 |------|-----------|
 | 1    | f0        |
 | 2    | volumen   |
-| 3    | ratio X   |
+| 3    | BPM       |
 | 4    | ratio Y   |
 
 Si movés un control no asignado, el **MIDI inspector** muestra el CC exacto.
@@ -169,9 +169,11 @@ Las notas del teclado (C3-C6 aprox.) cambian la frecuencia fundamental `f0` seg�
 - `Space` — toggle SHIFT.
 - `A` — toggle arpegiador.
 - `B` — cargar secuencia BEACON.
-- `1` - `8` — cargar beacon de usuario 1-8.
-- `←` / `→` — beacon anterior / siguiente.
 - `P` — play/pause del secuenciador.
+- `↑` / `↓` — subir/bajar BPM de a 5.
+- `←` / `→` — modo de recorrido anterior/siguiente.
+- `<` / `>` — beacon de usuario anterior/siguiente.
+- `1` - `8` — cargar beacon de usuario 1-8.
 
 ---
 
@@ -267,10 +269,10 @@ Sin dependencias externas. Servidor local solo para cumplir con las restriccione
 - [x] Colores más neon y fade rápido al cambiar de preset.
 - [x] Lissajous sincronizado con el reloj de audio y fase reiniciada por ratio.
 - [x] Sistema de beacons de usuario: 8 slots con guardado/carga en `localStorage`.
+- [x] BPM controlable con knob del Minilab 3 (vía learn) y tap-tempo.
+- [x] Modos de recorrido del beacon: forward, reverse, ping-pong, random, manual.
+- [x] Visualización del camino del beacon sobre el canvas.
 - [ ] Librería de beacons: ciclo de quintas, serie φ, escala justa, inverso, aleatorio.
-- [ ] Editor visual del beacon: constelación conectada de los 16 pasos sobre el canvas.
-- [ ] Modos de recorrido del beacon: forward, reverse, ping-pong, random, manual.
-- [ ] BPM controlable con knob del Minilab 3 y tap-tempo.
-- [ ] Mapeo de pads a beacons guardados.
+- [ ] Editor visual del beacon: constelación conectada editable sobre el canvas.
 - [ ] Exportar/importar beacons como JSON.
 - [ ] Modo osciloscopio XY a pantalla completa.
