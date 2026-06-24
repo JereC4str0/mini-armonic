@@ -1,6 +1,8 @@
 # mini-armonic
 
-Laboratorio sonoro-visual de proporciones armónicas. Convierte un controlador MIDI en un generador de campos armónicos sostenidos, donde en lugar de tocar notas aisladas manipulás relaciones de frecuencia simples (`2:3`, `3:4`, `φ`, etc.) y visualizás esas proporciones en tiempo real.
+Laboratorio sonoro-visual para explorar, programar y transmitir **beacons armónicos**.
+
+Un beacon armónico es una secuencia de relaciones de frecuencia simples —ratios como `1:1`, `2:3`, `3:4`, `φ`— que se recorre en loop como un faro. En lugar de tocar notas aisladas, manipulás proporciones, visualizás su geometría en tiempo real y escuchás cómo resuenan entre sí.
 
 Basado en ideas de **Harmonic Information Theory** por Mariano Fernández Méndez / AlterMundi.
 
@@ -16,17 +18,24 @@ descargar el video original: [mini-armonic-demo.mp4](./mini-armonic-demo.mp4)
 
 ---
 
-## Qué hace
+## Qué es esto
 
-- Genera un campo armónico sostenido a partir de una frecuencia fundamental `f0`.
-- Superpone armónicos con un spread configurable.
-- Dibuja una figura de **Lissajous** con el ratio activo, color propio por proporción y estela luminosa.
-- Muestra un **espectro** coloreado dinámicamente según el ratio activo.
-- Visualiza un **círculo armónico** con los armónicos coloreados por su relación con `f0`.
-- Cada **preset de pad** tiene un color distintivo que se propaga por toda la interfaz.
-- Permite programar **16 pasos** de ratios y recorrerlos con un arpegiador.
-- **Exporta el campo armónico actual a WAV** usando `OfflineAudioContext` (calidad del sample rate del navegador, estéreo, 16-bit).
-- Loguea todos los mensajes MIDI entrantes en un **MIDI inspector** integrado.
+mini-armonic no es un DAW. No hay pistas, clips ni arreglos. Es un **laboratorio de intervalos y proporciones** con tres modos de trabajo:
+
+- **Explorar**: tocá un pad, girá un knob y observá cómo cambia el campo armónico y su figura de Lissajous.
+- **Programar**: construí una secuencia de hasta 16 ratios en el programador de pasos.
+- **Transmitir**: activá ARP + SEQ y dejá que el beacon recorra la secuencia en loop.
+
+### Elementos principales
+
+- **Campo armónico sostenido** a partir de una frecuencia fundamental `f0`.
+- **Superposición de armónicos** con spread configurable.
+- **Figura de Lissajous** del ratio activo: la forma geométrica *es* el intervalo.
+- **Espectro** coloreado dinámicamente por el ratio.
+- **Círculo armónico** con los armónicos `1:n` distribuidos logarítmicamente.
+- **Programador de 16 pasos** para secuencias de ratios (beacons).
+- **Exportación a WAV** del campo armónico actual, pensada como captura de un estado descubierto.
+- **MIDI inspector** integrado para ver todo lo que llega del controlador.
 
 ---
 
@@ -48,7 +57,7 @@ python3 -m http.server 8081
 Abrí en el navegador:
 
 ```text
-http://localhost:8081/mini-armonic-v3.html
+http://localhost:8081/mini-armonic.html
 ```
 
 Hacé clic en **INICIAR**, conectá tu controlador y empezá a explorar.
@@ -110,18 +119,35 @@ Si movés un control no asignado, el **MIDI inspector** muestra el CC exacto.
 
 ### Pads del Minilab 3 (notas 36-43)
 
-| Pad | Nota | Preset HIT      | Ratio    | Tipo     |
-|-----|------|-----------------|----------|----------|
-| 1   | 36   | unísono         | 1:1      | storage  |
-| 2   | 37   | octava          | 1:2      | storage  |
-| 3   | 38   | quinta          | 2:3      | storage  |
-| 4   | 39   | cuarta          | 3:4      | storage  |
-| 5   | 40   | tercera mayor   | 4:5      | storage  |
-| 6   | 41   | sexta menor     | 3:5      | storage  |
-| 7   | 42   | φ query         | 1:φ      | query    |
-| 8   | 43   | φ² query        | 1:φ²     | query    |
+| Pad | Nota | Preset HIT      | Ratio    | Tipo     | Shift + pad        |
+|-----|------|-----------------|----------|----------|--------------------|
+| 1   | 36   | unísono         | 1:1      | storage  | cargar beacon 1    |
+| 2   | 37   | octava          | 1:2      | storage  | cargar beacon 2    |
+| 3   | 38   | quinta          | 2:3      | storage  | cargar beacon 3    |
+| 4   | 39   | cuarta          | 3:4      | storage  | cargar beacon 4    |
+| 5   | 40   | tercera mayor   | 4:5      | storage  | cargar beacon 5    |
+| 6   | 41   | sexta menor     | 3:5      | storage  | cargar beacon 6    |
+| 7   | 42   | φ query         | 1:φ      | query    | cargar beacon 7    |
+| 8   | 43   | φ² query        | 1:φ²     | query    | cargar beacon 8    |
 
 Los primeros seis presets cubren la región densa **1:2:3:4:5** que Mariano Fernández Méndez identifica en el Harmonic Beacon como la que genera las figuras de Lissajous más estables. Los dos últimos son ratios de activación: no buscan estabilidad sino recorrer el campo sin hacer _lock_.
+
+Con **SHIFT** activo, los 8 pads se convierten en lanzadores de los **beacons de usuario** guardados.
+
+### Beacons de usuario
+
+mini-armonic tiene 8 slots para guardar secuencias de ratios (beacons) en `localStorage`.
+
+- **Click** en un slot: carga el beacon en el programador de 16 pasos y lo reproduce.
+- **Shift + click** en un slot: guarda la secuencia actual en ese slot.
+- **Teclas `1` a `8`**: cargan el beacon correspondiente.
+- Los beacons se persisten entre sesiones.
+
+Cada beacon guarda:
+
+- los 16 pasos con sus ratios,
+- un nombre (`Beacon 1`, `Beacon 2`, etc.),
+- tempo y modo de recorrido (reservado para futuras versiones).
 
 ### Funciones
 
@@ -134,19 +160,6 @@ Los primeros seis presets cubren la región densa **1:2:3:4:5** que Mariano Fern
 | SAVE   | Guarda el ratio actual en el paso actual.     |
 | CLEAR  | Restaura la secuencia por defecto.            |
 
-Con **SHIFT** activo (botón de la UI, tecla `Space`, o pad 37) los pads pasan a funciones secundarias:
-
-| Pad | Función secundaria           |
-|-----|------------------------------|
-| 1   | guardar ratio en paso actual |
-| 2   | toggle SHIFT                 |
-| 3   | arpegiador on/off            |
-| 4   | secuenciador on/off          |
-| 5   | grabar (reservado)           |
-| 6   | reproducir (reservado)       |
-| 7   | stop (reservado)             |
-| 8   | limpiar secuencia            |
-
 ### Teclado del controlador
 
 Las notas del teclado (C3-C6 aprox.) cambian la frecuencia fundamental `f0` según la nota tocada.
@@ -156,31 +169,43 @@ Las notas del teclado (C3-C6 aprox.) cambian la frecuencia fundamental `f0` seg�
 - `Space` — toggle SHIFT.
 - `A` — toggle arpegiador.
 - `B` — cargar secuencia BEACON.
+- `1` - `8` — cargar beacon de usuario 1-8.
+- `←` / `→` — beacon anterior / siguiente.
+- `P` — play/pause del secuenciador.
 
 ---
 
 ## Interfaz
 
-| Sección             | Descripción                                          |
-|---------------------|------------------------------------------------------|
-| Faders / Knobs      | Controles virtuales de los 8 parámetros principales. |
-| Faders físicos      | 4 slots con modo learn para faders reales.           |
-| Funciones           | SHIFT, ARP, SEQ, SAVE, CLEAR.                        |
-| Canvas central      | Lissajous, espectro y círculo armónico.              |
-| Modo focus          | Botón □ para enfocar solo el canvas.                 |
-| Campo activo        | Métricas en tiempo real, coloreadas por ratio.       |
-| Takes               | Renders WAV exportados con play/download/delete.     |
-| MIDI inspector      | Log de mensajes MIDI entrantes.                      |
-| Presets armónicos   | 8 pads de proporciones.                              |
-| Programador 16 pasos| Secuenciador de ratios.                              |
+| Sección              | Descripción                                                      |
+|----------------------|------------------------------------------------------------------|
+| Faders / Knobs       | Controles virtuales de los 8 parámetros principales.             |
+| Faders físicos       | 4 slots con modo learn para faders reales.                       |
+| Funciones            | SHIFT, ARP, SEQ, BEACON, SAVE, CLEAR.                            |
+| Canvas central       | Lissajous, espectro y círculo armónico.                          |
+| Modo focus           | Botón □ para enfocar solo el canvas.                             |
+| Campo activo         | Métricas en tiempo real, coloreadas por ratio.                   |
+| Takes                | Renders WAV exportados con play/download/delete.                 |
+| MIDI inspector       | Log de mensajes MIDI entrantes.                                  |
+| Presets armónicos    | 8 pads de proporciones (semillas del beacon).                    |
+| Beacons de usuario   | 8 slots para guardar/cargar secuencias de ratios.                |
+| Programador 16 pasos | Secuenciador de ratios que define el beacon.                     |
 
 ---
 
 ## Visualización
 
-- **Lissajous**: figura XY con trail degradado, glow difuso y marcador de fase. El color del trazo cambia según el ratio activo.
-- **Espectro**: barras frecuenciales con gradiente dinámico coloreado por el ratio activo. Etiquetas `1:n` en los picos armónicos detectados.
-- **Círculo armónico**: armónicos `1:n` distribuidos logarítmicamente alrededor de `f0`, coloreados con variantes del color del ratio activo.
+La visualización está pensada como un **visor científico-musical** del ratio activo, no como un efecto decorativo.
+
+- **Lissajous**: figura XY sincronizada con el reloj de audio (`audioCtx.currentTime`). Cada vez que cambia el ratio —por un pad, por el secuenciador o por BEACON— la fase se reinicia para que la figura aparezca exacta desde el origen. Incluye:
+  - retícula cartesiana sutil con ejes X/Y,
+  - círculo unitario de referencia,
+  - marcas `-1`, `0`, `1`,
+  - trail degradado con glow externo e interno,
+  - marcador de fase y línea de lectura al centro,
+  - etiqueta del ratio y valores de `f0` y fase.
+- **Espectro**: barras frecuenciales compactas en la esquina inferior derecha, con gradiente dinámico y picos armónicos etiquetados `1:n`.
+- **Círculo armónico**: armónicos `1:n` distribuidos logarítmicamente alrededor de `f0`, en la esquina superior derecha.
 - **Paleta cromática**: cada preset de pad tiene un color asignado que se propaga al acento de la interfaz, sliders, métricas y visualizaciones.
 
 ### Colores por preset
@@ -194,7 +219,7 @@ Las notas del teclado (C3-C6 aprox.) cambian la frecuencia fundamental `f0` seg�
 | 5   | 3:5   | ámbar      |
 | 6   | 4:5   | naranja    |
 | 7   | φ     | dorado     |
-| 8   | φ²    | rosa coral |
+| 8   | φ²    | magenta    |
 
 ---
 
@@ -202,16 +227,16 @@ Las notas del teclado (C3-C6 aprox.) cambian la frecuencia fundamental `f0` seg�
 
 Cada paso guarda un ratio `X:Y`. Cuando **ARP** y **SEQ** están activos, el campo avanza automáticamente por los 16 pasos. Hacé clic en un paso para guardar el ratio actual ahí, o usá **SHIFT + Pad 1**.
 
+El botón **BEACON** carga una secuencia de referencia inspirada en la portada del libro HIT y prende ARP + SEQ automáticamente, así el laboratorio empieza a transmitir de inmediato.
+
 ---
 
 ## Archivos
 
 | Archivo                | Descripción                                      |
 |------------------------|--------------------------------------------------|
-| `mini-armonic-v3.html` | Versión actual.                                  |
-| `mini-armonic-v2.html` | Rediseño futurista previo.                       |
-| `mini-armonic-v1.html` | Primera versión funcional.                       |
-| `screenshot-v3.png`    | Captura de la interfaz v3.                       |
+| `mini-armonic.html`    | Aplicación principal.                            |
+| `screenshot.png`       | Captura de la interfaz actual.                   |
 | `README.md`            | Este archivo.                                    |
 
 ---
@@ -238,7 +263,14 @@ Sin dependencias externas. Servidor local solo para cumplir con las restriccione
 ## Roadmap
 
 - [x] Exportar campo armónico a WAV.
-- [ ] Loop/grabación de movimientos de knobs.
-- [ ] Presets guardables en `localStorage`.
-- [ ] Integración con DAW vía MIDI o WebSocket.
+- [x] BEACON: secuencia 1:2:3:4:5 con activación automática de ARP + SEQ.
+- [x] Colores más neon y fade rápido al cambiar de preset.
+- [x] Lissajous sincronizado con el reloj de audio y fase reiniciada por ratio.
+- [x] Sistema de beacons de usuario: 8 slots con guardado/carga en `localStorage`.
+- [ ] Librería de beacons: ciclo de quintas, serie φ, escala justa, inverso, aleatorio.
+- [ ] Editor visual del beacon: constelación conectada de los 16 pasos sobre el canvas.
+- [ ] Modos de recorrido del beacon: forward, reverse, ping-pong, random, manual.
+- [ ] BPM controlable con knob del Minilab 3 y tap-tempo.
+- [ ] Mapeo de pads a beacons guardados.
+- [ ] Exportar/importar beacons como JSON.
 - [ ] Modo osciloscopio XY a pantalla completa.
